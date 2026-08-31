@@ -7,7 +7,8 @@ const scoreElement = document.getElementById("score");
 const statusElement = document.getElementById("status");
 
 const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
-const ball = { x: 0, y: 1.25, z: -7.5, vx: 0, vy: 0, vz: 0, radius: 0.16 };
+// Ball is deliberately 60% of the original prototype size, both visually and physically.
+const ball = { x: 0, y: 1.25, z: -7.5, vx: 0, vy: 0, vz: 0, radius: 0.096 };
 let aim = 0;
 let score = 0;
 let wickets = 0;
@@ -65,9 +66,14 @@ function drawCourt() {
   const rightTopNear = project(court.halfWidth, court.ceiling, court.nearZ);
 
   polygon([nearLeft, nearRight, farRight, farLeft], "#205a25", "#76a65b", 1);
-  polygon([nearLeft, farLeft, frontTopLeft, leftTopNear], "#101418", "#2670ff", 2);
-  polygon([nearRight, rightTopNear, frontTopRight, farRight], "#16120f", "#ff8129", 2);
+  // High-contrast faces make both physical side walls unambiguous on a phone screen.
+  polygon([nearLeft, farLeft, frontTopLeft, leftTopNear], "#12376f", "#59a0ff", 2.5);
+  polygon([nearRight, rightTopNear, frontTopRight, farRight], "#6a2d10", "#ffad58", 2.5);
   polygon([farLeft, farRight, frontTopRight, frontTopLeft], "#151618", "#d9b937", 2);
+
+  // Visible horizontal dividers distinguish the 1 and 2 scoring zones on each side wall.
+  drawLine(project(-court.halfWidth, 4, court.nearZ), project(-court.halfWidth, 4, court.farZ), "#dceaff", 1.7);
+  drawLine(project(court.halfWidth, 4, court.nearZ), project(court.halfWidth, 4, court.farZ), "#ffe0bd", 1.7);
 
   // Pitch and creases.
   const pitchNearLeft = project(-1.6, 0.02, -7.2);
@@ -121,7 +127,7 @@ function drawWallLabel(text, x, y, z, color, fontSize) {
 
 function drawBall() {
   const p = project(ball.x, ball.y, ball.z);
-  const radius = Math.max(3, 13 * p.scale);
+  const radius = Math.max(2, 7.8 * p.scale);
   const glow = ctx.createRadialGradient(p.x - radius * 0.25, p.y - radius * 0.3, 1, p.x, p.y, radius * 1.25);
   glow.addColorStop(0, "#ff8a8a");
   glow.addColorStop(0.35, "#e13030");
