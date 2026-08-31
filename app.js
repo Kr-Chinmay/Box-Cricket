@@ -14,6 +14,8 @@ const ball = { x: 0, y: 1.25, z: -7.5, vx: 0, vy: 0, vz: 0, radius: 0.096 };
 let aim = 0;
 let loftSelected = false;
 let timingPosition = 0.5;
+let timingRunning = true;
+let timingStartedAt = performance.now();
 let score = 0;
 let wickets = 0;
 let inPlay = false;
@@ -194,6 +196,8 @@ function scoreRuns(runs) {
 function launchBall() {
   if (inPlay) return;
   const timing = getTimingResult(timingPosition);
+  // Freeze the marker where the player pressed Launch so the result remains visible.
+  timingRunning = false;
   ball.x = 0; ball.y = 1.25; ball.z = -7.5;
   // Timing affects accuracy and power. Later, poor timing will also allow misses and catches.
   ball.vx = aim * (timing.accuracy * 10.5);
@@ -217,7 +221,8 @@ function getTimingResult(position) {
 
 function updateTimingGauge(now) {
   // A smooth left-to-right-to-left sweep gives the player a simple timing challenge.
-  timingPosition = (Math.sin(now / 520) + 1) / 2;
+  if (!timingRunning) return;
+  timingPosition = (Math.sin((now - timingStartedAt) / 520) + 1) / 2;
   timingMarker.style.left = `${timingPosition * 100}%`;
 }
 
@@ -225,6 +230,8 @@ function resetBall(message) {
   ball.x = 0; ball.y = 1.25; ball.z = -7.5;
   ball.vx = ball.vy = ball.vz = 0;
   inPlay = false;
+  timingRunning = true;
+  timingStartedAt = performance.now();
   launchButton.disabled = false;
   loftButton.disabled = false;
   statusElement.textContent = message;
