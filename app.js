@@ -4,6 +4,7 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const launchButton = document.getElementById("launch");
 const loftButton = document.getElementById("loft");
+const timingMarker = document.getElementById("timing-marker");
 const scoreElement = document.getElementById("score");
 const statusElement = document.getElementById("status");
 
@@ -12,6 +13,7 @@ const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
 const ball = { x: 0, y: 1.25, z: -7.5, vx: 0, vy: 0, vz: 0, radius: 0.096 };
 let aim = 0;
 let loftSelected = false;
+let timingPosition = 0.5;
 let score = 0;
 let wickets = 0;
 let inPlay = false;
@@ -191,17 +193,32 @@ function scoreRuns(runs) {
 
 function launchBall() {
   if (inPlay) return;
+  const timing = getTimingResult(timingPosition);
   ball.x = 0; ball.y = 1.25; ball.z = -7.5;
-  ball.vx = aim * 10.5;
+  // Timing affects accuracy and power. Later, poor timing will also allow misses and catches.
+  ball.vx = aim * (timing.accuracy * 10.5);
   // A lofted shot has enough height to reach the upper scoring bands without hitting the roof.
-  ball.vy = loftSelected ? 10.2 : 5.9;
-  ball.vz = 20.5;
+  ball.vy = (loftSelected ? 10.2 : 5.9) * timing.power;
+  ball.vz = 20.5 * timing.power;
   inPlay = true;
   scoredThisBall = false;
   resetTime = performance.now() + 6200;
   launchButton.disabled = true;
   loftButton.disabled = true;
-  statusElement.textContent = loftSelected ? "Lofted ball in play…" : "Grounded ball in play…";
+  statusElement.textContent = `${timing.label} timing — ${loftSelected ? "lofted" : "grounded"} ball in play…`;
+}
+
+function getTimingResult(position) {
+  const distance = Math.abs(position - 0.5);
+  if (distance <= 0.11) return { label: "Perfect", power: 1.05, accuracy: 1 };
+  if (distance <= 0.25) return { label: "Good", power: 0.95, accuracy: 0.93 };
+  return { label: "Mistimed", power: 0.82, accuracy: 0.72 };
+}
+
+function updateTimingGauge(now) {
+  // A smooth left-to-right-to-left sweep gives the player a simple timing challenge.
+  timingPosition = (Math.sin(now / 520) + 1) / 2;
+  timingMarker.style.left = `${timingPosition * 100}%`;
 }
 
 function resetBall(message) {
@@ -238,6 +255,7 @@ function showShotSelection() {
 function frame(now) {
   const dt = Math.min(0.033, (now - lastFrame) / 1000);
   lastFrame = now;
+  updateTimingGauge(now);
   update(dt);
   drawCourt();
   drawBall();
