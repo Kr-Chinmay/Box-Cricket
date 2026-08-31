@@ -3,6 +3,7 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const launchButton = document.getElementById("launch");
+const loftButton = document.getElementById("loft");
 const scoreElement = document.getElementById("score");
 const statusElement = document.getElementById("status");
 
@@ -10,6 +11,7 @@ const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
 // Ball is deliberately 60% of the original prototype size, both visually and physically.
 const ball = { x: 0, y: 1.25, z: -7.5, vx: 0, vy: 0, vz: 0, radius: 0.096 };
 let aim = 0;
+let loftSelected = false;
 let score = 0;
 let wickets = 0;
 let inPlay = false;
@@ -191,13 +193,15 @@ function launchBall() {
   if (inPlay) return;
   ball.x = 0; ball.y = 1.25; ball.z = -7.5;
   ball.vx = aim * 10.5;
-  ball.vy = 5.9;
+  // A lofted shot has enough height to reach the upper scoring bands without hitting the roof.
+  ball.vy = loftSelected ? 10.2 : 5.9;
   ball.vz = 20.5;
   inPlay = true;
   scoredThisBall = false;
   resetTime = performance.now() + 6200;
   launchButton.disabled = true;
-  statusElement.textContent = "Ball in play…";
+  loftButton.disabled = true;
+  statusElement.textContent = loftSelected ? "Lofted ball in play…" : "Grounded ball in play…";
 }
 
 function resetBall(message) {
@@ -205,6 +209,7 @@ function resetBall(message) {
   ball.vx = ball.vy = ball.vz = 0;
   inPlay = false;
   launchButton.disabled = false;
+  loftButton.disabled = false;
   statusElement.textContent = message;
 }
 
@@ -213,7 +218,21 @@ function setAim(event) {
   const rect = canvas.getBoundingClientRect();
   const ratio = (event.clientX - rect.left) / rect.width;
   aim = Math.max(-0.86, Math.min(0.86, (ratio - 0.5) * 2));
-  statusElement.textContent = aim < -0.25 ? "Off-side lane selected." : aim > 0.25 ? "Leg-side lane selected." : "Straight lane selected.";
+  showShotSelection();
+}
+
+function toggleLoft() {
+  if (inPlay) return;
+  loftSelected = !loftSelected;
+  loftButton.classList.toggle("is-selected", loftSelected);
+  loftButton.setAttribute("aria-pressed", String(loftSelected));
+  loftButton.textContent = loftSelected ? "Loft: On" : "Loft: Off";
+  showShotSelection();
+}
+
+function showShotSelection() {
+  const lane = aim < -0.25 ? "Off-side" : aim > 0.25 ? "Leg-side" : "Straight";
+  statusElement.textContent = `${lane} lane selected — ${loftSelected ? "lofted" : "grounded"} shot ready.`;
 }
 
 function frame(now) {
@@ -227,6 +246,7 @@ function frame(now) {
 
 canvas.addEventListener("pointerdown", setAim);
 launchButton.addEventListener("click", launchBall);
+loftButton.addEventListener("click", toggleLoft);
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 resetBall("Tap a lane in the court, then launch the ball.");

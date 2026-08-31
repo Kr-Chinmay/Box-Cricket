@@ -18,8 +18,11 @@
 
       <section class="controls" aria-label="Prototype controls">
         <p id="status" aria-live="polite">Tap a lane in the court, then launch the ball.</p>
-        <button id="launch" type="button">Launch ball</button>
-        <p class="hint">Tap left, centre, or right in the court to aim. This tests scoring-wall physics before batting is added.</p>
+        <div class="button-row">
+          <button id="loft" class="loft-button" type="button" aria-pressed="false">Loft: Off</button>
+          <button id="launch" type="button">Launch ball</button>
+        </div>
+        <p class="hint">Tap left, centre, or right in the court to aim. Turn on Loft for a higher, riskier shot that can reach the 6 and 2 zones.</p>
       </section>
     </main>
     <script src="app.js"></script>

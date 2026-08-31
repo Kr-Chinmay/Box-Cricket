@@ -47,8 +47,8 @@ canvas {
 
 .controls { padding: 14px 4px 0; text-align: center; }
 #status { margin: 0 0 10px; min-height: 1.4em; color: #f3d37c; }
+.button-row { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 10px; }
 button {
-  width: 100%;
   min-height: 52px;
   border: 0;
   border-radius: 13px;
@@ -60,6 +60,8 @@ button {
   cursor: pointer;
 }
 button:disabled { opacity: 0.55; cursor: wait; }
+.loft-button { background: #264d94; color: #f5f8ff; }
+.loft-button.is-selected { background: #e07525; color: #1d0e05; box-shadow: inset 0 0 0 2px #ffd176; }
 .hint { margin: 10px 8px 0; color: #b7c3b7; font-size: 0.82rem; line-height: 1.4; }
 
 @media (min-width: 600px) {
