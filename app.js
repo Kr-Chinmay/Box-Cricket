@@ -36,7 +36,8 @@ function project(x, y, z) {
   const depth = (z - court.nearZ) / (court.farZ - court.nearZ);
   const scale = 1.48 - depth * 0.9;
   return {
-    x: width / 2 + x * width * 0.1 * scale,
+    // A wider field of view keeps both physical side walls inside a portrait screen.
+    x: width / 2 + x * width * 0.04 * scale,
     y: height * (0.79 - depth * 0.48) - y * height * 0.075 * scale,
     scale
   };
@@ -66,14 +67,20 @@ function drawCourt() {
   const rightTopNear = project(court.halfWidth, court.ceiling, court.nearZ);
 
   polygon([nearLeft, nearRight, farRight, farLeft], "#205a25", "#76a65b", 1);
-  // High-contrast faces make both physical side walls unambiguous on a phone screen.
-  polygon([nearLeft, farLeft, frontTopLeft, leftTopNear], "#12376f", "#59a0ff", 2.5);
-  polygon([nearRight, rightTopNear, frontTopRight, farRight], "#6a2d10", "#ffad58", 2.5);
+  // Solid, separate scoring bands make the physical side walls obvious on a phone screen.
+  const leftMiddleNear = project(-court.halfWidth, 4, court.nearZ);
+  const leftMiddleFar = project(-court.halfWidth, 4, court.farZ);
+  const rightMiddleNear = project(court.halfWidth, 4, court.nearZ);
+  const rightMiddleFar = project(court.halfWidth, 4, court.farZ);
+  polygon([nearLeft, farLeft, leftMiddleFar, leftMiddleNear], "#0b2853", "#59a0ff", 2.5);
+  polygon([leftMiddleNear, leftMiddleFar, frontTopLeft, leftTopNear], "#1c5ca9", "#83b9ff", 2.5);
+  polygon([nearRight, rightMiddleNear, rightMiddleFar, farRight], "#54200b", "#ffad58", 2.5);
+  polygon([rightMiddleNear, rightTopNear, frontTopRight, rightMiddleFar], "#a84713", "#ffd09c", 2.5);
   polygon([farLeft, farRight, frontTopRight, frontTopLeft], "#151618", "#d9b937", 2);
 
   // Visible horizontal dividers distinguish the 1 and 2 scoring zones on each side wall.
-  drawLine(project(-court.halfWidth, 4, court.nearZ), project(-court.halfWidth, 4, court.farZ), "#dceaff", 1.7);
-  drawLine(project(court.halfWidth, 4, court.nearZ), project(court.halfWidth, 4, court.farZ), "#ffe0bd", 1.7);
+  drawLine(leftMiddleNear, leftMiddleFar, "#dceaff", 2.4);
+  drawLine(rightMiddleNear, rightMiddleFar, "#ffe0bd", 2.4);
 
   // Pitch and creases.
   const pitchNearLeft = project(-1.6, 0.02, -7.2);
