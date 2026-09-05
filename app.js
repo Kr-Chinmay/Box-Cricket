@@ -125,11 +125,14 @@ function drawCourt() {
   const pitchFarRight = project(1.6, 0.02, 12.2);
   const pitchFarLeft = project(-1.6, 0.02, 12.2);
   polygon([pitchNearLeft, pitchNearRight, pitchFarRight, pitchFarLeft], "rgba(146, 161, 92, 0.25)");
+  // Batting crease: bowling crease under the stumps, popping crease in front, and return creases either side.
   drawLine(project(-2.2, 0.03, -7.5), project(2.2, 0.03, -7.5), "#f6f6e8", 2.4);
   drawLine(project(-2.2, 0.03, -6.25), project(2.2, 0.03, -6.25), "#f6f6e8", 1.8);
+  drawLine(project(-2.2, 0.03, -9.0), project(-2.2, 0.03, -6.25), "#f6f6e8", 1.8);
+  drawLine(project(2.2, 0.03, -9.0), project(2.2, 0.03, -6.25), "#f6f6e8", 1.8);
   drawLine(project(-2.2, 0.03, 12.2), project(2.2, 0.03, 12.2), "#f6f6e8", 1.6);
 
-  drawWicket(-7.5, 1.18);
+  drawWicket(-7.5, 1.5);
   drawWicket(12.2, 1.18);
 
   drawWallLabel("6", 0, 6.0, court.farZ, "#f2c947", 32);
@@ -241,13 +244,44 @@ function drawLine(a, b, color, lineWidth) {
 }
 
 function drawWicket(z, heightWorld) {
-  [-0.18, 0, 0.18].forEach((offset) => {
+  const baseCentre = project(0, 0.015, z);
+  const shadowWidth = Math.max(5, 17 * baseCentre.scale);
+  ctx.save();
+  ctx.fillStyle = "rgba(0, 0, 0, .42)";
+  ctx.beginPath();
+  ctx.ellipse(baseCentre.x + shadowWidth * 0.16, baseCentre.y + 3, shadowWidth, Math.max(1.5, shadowWidth * 0.16), 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  const tops = [];
+  [-0.28, 0, 0.28].forEach((offset) => {
     const base = project(offset, 0, z);
     const top = project(offset, heightWorld, z);
-    drawLine(base, top, "#9b5b1d", Math.max(2, 3.8 * base.scale));
+    tops.push(top);
+    const width = Math.max(2, 3.7 * base.scale);
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.shadowColor = "rgba(0, 0, 0, .48)";
+    ctx.shadowBlur = Math.max(1, 2 * base.scale);
+    drawLine(base, top, "#542708", width);
+    ctx.shadowBlur = 0;
+    drawLine({ x: base.x - width * 0.17, y: base.y }, { x: top.x - width * 0.17, y: top.y }, "#ba7229", Math.max(1, width * 0.38));
+    drawLine({ x: base.x + width * 0.2, y: base.y }, { x: top.x + width * 0.2, y: top.y }, "#7a3c10", Math.max(1, width * 0.22));
+    ctx.restore();
   });
-  drawLine(project(-0.18, heightWorld, z), project(0, heightWorld, z), "#e4b073", 2);
-  drawLine(project(0, heightWorld, z), project(0.18, heightWorld, z), "#e4b073", 2);
+  drawBail(tops[0], tops[1]);
+  drawBail(tops[1], tops[2]);
+}
+
+function drawBail(left, right) {
+  const lift = Math.max(1.2, Math.abs(right.x - left.x) * 0.13);
+  const start = { x: left.x + lift * 0.12, y: left.y - lift };
+  const end = { x: right.x - lift * 0.12, y: right.y - lift };
+  ctx.save();
+  ctx.lineCap = "round";
+  drawLine(start, end, "#67300a", Math.max(1.4, lift * 0.48));
+  drawLine({ x: start.x, y: start.y - 0.35 }, { x: end.x, y: end.y - 0.35 }, "#d08a36", Math.max(0.8, lift * 0.16));
+  ctx.restore();
 }
 
 function drawWallLabel(text, x, y, z, color, fontSize) {
@@ -260,6 +294,8 @@ function drawWallLabel(text, x, y, z, color, fontSize) {
 }
 
 function drawBall() {
+  // Before a delivery, the bowler is assumed to be holding the ball off-screen.
+  if (!inPlay) return;
   const p = project(ball.x, ball.y, ball.z);
   const radius = Math.max(2, 7.8 * p.scale);
   const glow = ctx.createRadialGradient(p.x - radius * 0.25, p.y - radius * 0.3, 1, p.x, p.y, radius * 1.25);
