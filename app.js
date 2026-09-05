@@ -9,7 +9,7 @@ const statusElement = document.getElementById("status");
 const lohitSprite = new Image();
 let lohitSpriteReady = false;
 lohitSprite.onload = () => { lohitSpriteReady = true; };
-lohitSprite.src = "lohit-batter-3d-v1.png";
+lohitSprite.src = "lohit-batter-ready-v1.png";
 
 const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
 // Compact underarm box-cricket pitch: the bowling end is deliberately much closer than the first prototype.
@@ -157,7 +157,7 @@ function drawCourt() {
 function batterLayout() {
   const feet = project(-0.44, 0, battingStumpsZ + 1.25);
   const scale = Math.max(0.85, Math.min(1.28, feet.scale));
-  const spriteHeight = 150 * scale;
+  const spriteHeight = 164 * scale;
   const spriteWidth = spriteHeight * (2 / 3);
   const spriteX = feet.x - spriteWidth * 0.48;
   const spriteY = feet.y - spriteHeight;
@@ -168,9 +168,9 @@ function batterLayout() {
     spriteY,
     spriteWidth,
     spriteHeight,
-    // Right-handed Lohit's bat is held on screen-right when viewed from behind.
+    // Right-handed Lohit's bat rests on screen-right when viewed from behind.
     batContact: lohitSpriteReady
-      ? { x: spriteX + spriteWidth * 0.84, y: spriteY + spriteHeight * 0.31 }
+      ? { x: spriteX + spriteWidth * 0.70, y: spriteY + spriteHeight * 0.58 }
       : { x: feet.x + 43 * scale, y: feet.y - 67 * scale }
   };
 }
@@ -195,14 +195,15 @@ function drawBatter() {
   }
   const { spriteX, spriteY, spriteWidth, spriteHeight } = batterLayout();
   // The generator returned a dark studio backdrop. These two silhouette clips retain only Lohit and his bat.
+  // This is a proper waiting stance: flexed knees, planted feet, and a lowered bat.
   drawSpriteMask(spriteX, spriteY, spriteWidth, spriteHeight, [
-    [0.45, 0.03], [0.64, 0.05], [0.73, 0.15], [0.76, 0.27], [0.84, 0.43],
-    [0.78, 0.59], [0.78, 0.71], [0.85, 0.91], [0.80, 0.99], [0.61, 0.98],
-    [0.53, 0.82], [0.44, 0.88], [0.29, 0.99], [0.06, 0.98], [0.13, 0.77],
-    [0.25, 0.57], [0.29, 0.42], [0.32, 0.25], [0.37, 0.10]
+    [0.52, 0.01], [0.72, 0.04], [0.79, 0.17], [0.74, 0.27], [0.72, 0.42],
+    [0.70, 0.55], [0.74, 0.72], [0.73, 0.94], [0.67, 0.99], [0.49, 0.99],
+    [0.46, 0.87], [0.38, 0.95], [0.17, 0.98], [0.12, 0.91], [0.21, 0.67],
+    [0.26, 0.53], [0.27, 0.38], [0.35, 0.22], [0.45, 0.13]
   ]);
   drawSpriteMask(spriteX, spriteY, spriteWidth, spriteHeight, [
-    [0.82, 0.00], [1.00, 0.00], [0.91, 0.30], [0.82, 0.43], [0.77, 0.39]
+    [0.66, 0.49], [0.75, 0.47], [0.96, 0.94], [0.89, 0.99], [0.62, 0.64]
   ]);
 }
 
