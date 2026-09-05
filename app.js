@@ -41,18 +41,19 @@ function size() {
 function project(x, y, z) {
   const { width, height } = size();
   const cameraHeight = 5.3;
-  const cameraZ = -16;
+  // Close to the batting wicket: this is the wicketkeeper's viewing position, not the back wall.
+  const cameraZ = -11.5;
   const pitch = -0.205;
   const dy = y - cameraHeight;
   const dz = z - cameraZ;
   // Rotate the court into the camera's slightly downward viewing direction.
   const viewY = dy * Math.cos(pitch) - dz * Math.sin(pitch);
   const viewZ = Math.max(0.5, dy * Math.sin(pitch) + dz * Math.cos(pitch));
-  const focal = height * 0.55;
+  const focal = height * 0.38;
   const scale = Math.min(1.65, 14 / viewZ);
   return {
     x: width / 2 + x / viewZ * focal,
-    y: height * 0.5 - viewY / viewZ * focal,
+    y: height * 0.47 - viewY / viewZ * focal,
     scale
   };
 }
@@ -159,20 +160,21 @@ function fillClippedPolygon(points, fill) {
 
 function drawArenaRoof() {
   const { width, height } = size();
-  const roof = ctx.createLinearGradient(0, 0, 0, height * 0.54);
-  roof.addColorStop(0, "#010202");
-  roof.addColorStop(0.62, "#030506");
+  const roof = ctx.createLinearGradient(0, 0, 0, height * 0.48);
+  roof.addColorStop(0, "#020303");
+  roof.addColorStop(0.64, "#050708");
   roof.addColorStop(1, "#0a0d0e");
   ctx.fillStyle = roof;
-  ctx.fillRect(0, 0, width, height * 0.56);
+  ctx.fillRect(0, 0, width, height * 0.5);
+  drawRoofChannels();
 }
 
 function drawCeilingLights() {
   const { width, height } = size();
-  // These rows begin large above the wicketkeeper and converge towards the front wall.
-  for (let row = 0; row < 10; row += 1) {
-    const depth = row / 9;
-    const y = height * (0.075 + depth * 0.285);
+  // Recessed roof lights begin larger over the wicketkeeper and converge towards the front wall.
+  for (let row = 0; row < 9; row += 1) {
+    const depth = row / 8;
+    const y = height * (0.07 + depth * 0.265);
     const spread = width * (0.43 * Math.pow(1 - depth, 1.32) + 0.016);
     [-1, -0.48, 0, 0.48, 1].forEach((column) => {
       drawCeilingLight(width / 2 + column * spread, y, depth);
@@ -181,15 +183,30 @@ function drawCeilingLights() {
 }
 
 function drawCeilingLight(x, y, depth) {
-  const radius = Math.max(1.15, 4.8 * (1 - depth) + 1.2);
-  const glow = ctx.createRadialGradient(x, y, 0, x, y, radius * 3.6);
-  glow.addColorStop(0, "rgba(255, 252, 215, .98)");
-  glow.addColorStop(0.22, "rgba(255, 240, 170, .74)");
+  const radius = Math.max(0.85, 3.25 * Math.pow(1 - depth, 1.4) + 0.8);
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, radius * 3.1);
+  glow.addColorStop(0, "rgba(255, 252, 222, .62)");
+  glow.addColorStop(0.28, "rgba(255, 240, 174, .24)");
   glow.addColorStop(1, "rgba(255, 238, 153, 0)");
   ctx.fillStyle = glow;
   ctx.beginPath(); ctx.arc(x, y, radius * 3.6, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#fff9da";
-  ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#1a1b1b";
+  ctx.beginPath(); ctx.ellipse(x, y, radius * 1.75, radius * 0.88, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#fff6d3";
+  ctx.beginPath(); ctx.ellipse(x, y, radius, radius * 0.48, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawRoofChannels() {
+  const { width, height } = size();
+  const vanishingPoint = { x: width / 2, y: height * 0.35 };
+  [-0.94, -0.47, 0, 0.47, 0.94].forEach((position) => {
+    ctx.beginPath();
+    ctx.moveTo(width / 2 + position * width * 0.47, 0);
+    ctx.lineTo(vanishingPoint.x + position * 7, vanishingPoint.y);
+    ctx.strokeStyle = "rgba(70, 75, 76, .32)";
+    ctx.lineWidth = position === 0 ? 1.3 : 0.8;
+    ctx.stroke();
+  });
 }
 
 function drawFrontWallLights() {
