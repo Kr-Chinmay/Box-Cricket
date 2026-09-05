@@ -17,16 +17,15 @@
       <canvas id="game" width="420" height="760" aria-label="Box Cricket playable court"></canvas>
 
       <section class="controls" aria-label="Prototype controls">
-        <p id="status" aria-live="polite">Tap a lane in the court, then launch the ball.</p>
+        <p id="status" aria-live="polite">Swipe forward in the court to play a shot.</p>
         <div class="timing-panel" aria-label="Shot timing gauge">
           <div class="timing-labels" aria-hidden="true"><span>EARLY</span><strong>PERFECT</strong><span>LATE</span></div>
           <div class="timing-gauge"><span id="timing-marker" class="timing-marker"></span></div>
         </div>
         <div class="button-row">
           <button id="loft" class="loft-button" type="button" aria-pressed="false">Loft: Off</button>
-          <button id="launch" type="button">Launch ball</button>
         </div>
-        <p class="hint">Tap left, centre, or right in the court to aim. Turn on Loft for a higher, riskier shot that can reach the 6 and 2 zones.</p>
+        <p class="hint">Swipe forward from straight to 70° left or right. Turn on Loft before swiping for a higher, riskier shot.</p>
       </section>
     </main>
     <script src="app.js"></script>

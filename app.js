@@ -2,7 +2,6 @@
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const launchButton = document.getElementById("launch");
 const loftButton = document.getElementById("loft");
 const timingMarker = document.getElementById("timing-marker");
 const scoreElement = document.getElementById("score");
@@ -11,7 +10,8 @@ const statusElement = document.getElementById("status");
 const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
 // Ball is deliberately 60% of the original prototype size, both visually and physically.
 const ball = { x: 0, y: 1.25, z: -7.5, vx: 0, vy: 0, vz: 0, radius: 0.096 };
-let aim = 0;
+let shotAngle = 0;
+let swipeStart = null;
 let loftSelected = false;
 let timingPosition = 0.5;
 let timingRunning = true;
@@ -142,11 +142,15 @@ function drawCourt() {
   drawWallLabel("2", court.halfWidth, 6.0, 5.3, "#62a6ff", 25);
   drawWallLabel("1", court.halfWidth, 2.1, 5.3, "#62a6ff", 25);
 
-  const laneX = size().width / 2 + aim * size().width * 0.25;
+  const guideLength = size().height * 0.23;
+  const guideStartX = size().width / 2;
+  const guideStartY = size().height * 0.88;
+  const laneX = guideStartX + Math.sin(shotAngle) * guideLength;
+  const laneY = guideStartY - Math.cos(shotAngle) * guideLength;
   ctx.strokeStyle = "rgba(242, 201, 71, 0.9)";
   ctx.lineWidth = 2;
   ctx.setLineDash([5, 6]);
-  ctx.beginPath(); ctx.moveTo(size().width / 2, size().height * 0.9); ctx.lineTo(laneX, size().height * 0.6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(guideStartX, guideStartY); ctx.lineTo(laneX, laneY); ctx.stroke();
   ctx.setLineDash([]);
 }
 
@@ -350,21 +354,21 @@ function scoreRuns(runs) {
   resetTime = performance.now() + 1450;
 }
 
-function launchBall() {
+function launchBall(angle) {
   if (inPlay) return;
   const timing = getTimingResult(timingPosition);
   // Freeze the marker where the player pressed Launch so the result remains visible.
   timingRunning = false;
   ball.x = 0; ball.y = 1.25; ball.z = -7.5;
   // Timing affects accuracy and power. Later, poor timing will also allow misses and catches.
-  ball.vx = aim * (timing.accuracy * 10.5);
+  const shotSpeed = 20.5 * timing.power;
+  ball.vx = Math.sin(angle) * shotSpeed * timing.accuracy;
   // A lofted shot has enough height to reach the upper scoring bands without hitting the roof.
   ball.vy = (loftSelected ? 10.2 : 5.9) * timing.power;
-  ball.vz = 20.5 * timing.power;
+  ball.vz = Math.cos(angle) * shotSpeed;
   inPlay = true;
   scoredThisBall = false;
   resetTime = performance.now() + 6200;
-  launchButton.disabled = true;
   loftButton.disabled = true;
   statusElement.textContent = `${timing.label} timing — ${loftSelected ? "lofted" : "grounded"} ball in play…`;
 }
@@ -389,17 +393,50 @@ function resetBall(message) {
   inPlay = false;
   timingRunning = true;
   timingStartedAt = performance.now();
-  launchButton.disabled = false;
   loftButton.disabled = false;
   statusElement.textContent = message;
 }
 
-function setAim(event) {
+function clampShotAngle(angle) {
+  const limit = 70 * Math.PI / 180;
+  return Math.max(-limit, Math.min(limit, angle));
+}
+
+function describeAngle(angle) {
+  if (angle < -0.12) return "Leg-side";
+  if (angle > 0.12) return "Off-side";
+  return "Straight";
+}
+
+function startSwipe(event) {
   if (inPlay) return;
   const rect = canvas.getBoundingClientRect();
-  const ratio = (event.clientX - rect.left) / rect.width;
-  aim = Math.max(-0.86, Math.min(0.86, (ratio - 0.5) * 2));
-  showShotSelection();
+  swipeStart = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  canvas.setPointerCapture?.(event.pointerId);
+}
+
+function previewSwipe(event) {
+  if (!swipeStart || inPlay) return;
+  const rect = canvas.getBoundingClientRect();
+  const dx = event.clientX - rect.left - swipeStart.x;
+  const forward = swipeStart.y - (event.clientY - rect.top);
+  if (forward < 8) return;
+  shotAngle = clampShotAngle(Math.atan2(dx, forward));
+  statusElement.textContent = `${describeAngle(shotAngle)} shot selected — release to play.`;
+}
+
+function finishSwipe(event) {
+  if (!swipeStart || inPlay) return;
+  const rect = canvas.getBoundingClientRect();
+  const dx = event.clientX - rect.left - swipeStart.x;
+  const forward = swipeStart.y - (event.clientY - rect.top);
+  swipeStart = null;
+  if (forward < 34) {
+    statusElement.textContent = "Swipe forward to play a shot.";
+    return;
+  }
+  shotAngle = clampShotAngle(Math.atan2(dx, forward));
+  launchBall(shotAngle);
 }
 
 function toggleLoft() {
@@ -412,8 +449,7 @@ function toggleLoft() {
 }
 
 function showShotSelection() {
-  const lane = aim < -0.25 ? "Leg-side" : aim > 0.25 ? "Off-side" : "Straight";
-  statusElement.textContent = `${lane} lane selected — ${loftSelected ? "lofted" : "grounded"} shot ready.`;
+  statusElement.textContent = `${loftSelected ? "Lofted" : "Grounded"} shot selected — swipe forward to play.`;
 }
 
 function frame(now) {
@@ -426,10 +462,12 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-canvas.addEventListener("pointerdown", setAim);
-launchButton.addEventListener("click", launchBall);
+canvas.addEventListener("pointerdown", startSwipe);
+canvas.addEventListener("pointermove", previewSwipe);
+canvas.addEventListener("pointerup", finishSwipe);
+canvas.addEventListener("pointercancel", () => { swipeStart = null; });
 loftButton.addEventListener("click", toggleLoft);
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
-resetBall("Tap a lane in the court, then launch the ball.");
+resetBall("Swipe forward in the court to play a shot.");
 requestAnimationFrame(frame);
