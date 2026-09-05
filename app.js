@@ -11,8 +11,8 @@ const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
 // Compact underarm box-cricket pitch: the bowling end is deliberately much closer than the first prototype.
 const battingStumpsZ = -7.5;
 const bowlingStumpsZ = 3.0;
-// Ball is deliberately 60% of the original prototype size, both visually and physically.
-const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.096 };
+// Ball is reduced again for the compact underarm court, both visually and physically.
+const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.0672 };
 let shotAngle = 0;
 let swipeStart = null;
 let loftSelected = false;
@@ -304,7 +304,7 @@ function drawBall() {
   // Before a delivery, the bowler is assumed to be holding the ball off-screen.
   if (!inPlay) return;
   const p = project(ball.x, ball.y, ball.z);
-  const radius = Math.max(2, 7.8 * p.scale);
+  const radius = Math.max(1.4, 5.46 * p.scale);
   const glow = ctx.createRadialGradient(p.x - radius * 0.25, p.y - radius * 0.3, 1, p.x, p.y, radius * 1.25);
   glow.addColorStop(0, "#ff8a8a");
   glow.addColorStop(0.35, "#e13030");
