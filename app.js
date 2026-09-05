@@ -6,6 +6,10 @@ const loftButton = document.getElementById("loft");
 const timingMarker = document.getElementById("timing-marker");
 const scoreElement = document.getElementById("score");
 const statusElement = document.getElementById("status");
+const lohitSprite = new Image();
+let lohitSpriteReady = false;
+lohitSprite.onload = () => { lohitSpriteReady = true; };
+lohitSprite.src = "lohit-batter-3d-v1.png";
 
 const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
 // Compact underarm box-cricket pitch: the bowling end is deliberately much closer than the first prototype.
@@ -153,11 +157,21 @@ function drawCourt() {
 function batterLayout() {
   const feet = project(-0.44, 0, battingStumpsZ + 1.25);
   const scale = Math.max(0.85, Math.min(1.28, feet.scale));
+  const spriteHeight = 150 * scale;
+  const spriteWidth = spriteHeight * (2 / 3);
+  const spriteX = feet.x - spriteWidth * 0.48;
+  const spriteY = feet.y - spriteHeight;
   return {
     feet,
     scale,
+    spriteX,
+    spriteY,
+    spriteWidth,
+    spriteHeight,
     // Right-handed Lohit's bat is held on screen-right when viewed from behind.
-    batContact: { x: feet.x + 43 * scale, y: feet.y - 67 * scale }
+    batContact: lohitSpriteReady
+      ? { x: spriteX + spriteWidth * 0.84, y: spriteY + spriteHeight * 0.31 }
+      : { x: feet.x + 43 * scale, y: feet.y - 67 * scale }
   };
 }
 
@@ -175,6 +189,38 @@ function drawShotGuide() {
 }
 
 function drawBatter() {
+  if (!lohitSpriteReady) {
+    drawBatterFallback();
+    return;
+  }
+  const { spriteX, spriteY, spriteWidth, spriteHeight } = batterLayout();
+  // The generator returned a dark studio backdrop. These two silhouette clips retain only Lohit and his bat.
+  drawSpriteMask(spriteX, spriteY, spriteWidth, spriteHeight, [
+    [0.45, 0.03], [0.64, 0.05], [0.73, 0.15], [0.76, 0.27], [0.84, 0.43],
+    [0.78, 0.59], [0.78, 0.71], [0.85, 0.91], [0.80, 0.99], [0.61, 0.98],
+    [0.53, 0.82], [0.44, 0.88], [0.29, 0.99], [0.06, 0.98], [0.13, 0.77],
+    [0.25, 0.57], [0.29, 0.42], [0.32, 0.25], [0.37, 0.10]
+  ]);
+  drawSpriteMask(spriteX, spriteY, spriteWidth, spriteHeight, [
+    [0.82, 0.00], [1.00, 0.00], [0.91, 0.30], [0.82, 0.43], [0.77, 0.39]
+  ]);
+}
+
+function drawSpriteMask(x, y, width, height, points) {
+  ctx.save();
+  ctx.beginPath();
+  points.forEach(([px, py], index) => {
+    const pointX = x + px * width;
+    const pointY = y + py * height;
+    index ? ctx.lineTo(pointX, pointY) : ctx.moveTo(pointX, pointY);
+  });
+  ctx.closePath();
+  ctx.clip();
+  ctx.drawImage(lohitSprite, x, y, width, height);
+  ctx.restore();
+}
+
+function drawBatterFallback() {
   const { feet, scale, batContact } = batterLayout();
   const s = scale;
   const waistY = feet.y - 47 * s;
