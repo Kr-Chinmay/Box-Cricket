@@ -135,8 +135,11 @@ function drawCourt() {
   drawLine(project(2.2, 0.03, battingStumpsZ - 1.5), project(2.2, 0.03, battingStumpsZ + 1.25), "#f6f6e8", 1.8);
   drawLine(project(-2.2, 0.03, bowlingStumpsZ), project(2.2, 0.03, bowlingStumpsZ), "#f6f6e8", 1.8);
 
-  drawWicket(battingStumpsZ, 1.5);
   drawWicket(bowlingStumpsZ, 1.18);
+  drawShotGuide();
+  drawBatter();
+  // The batting wicket is closest to the camera, so it is drawn after the batter.
+  drawWicket(battingStumpsZ, 1.5);
 
   drawWallLabel("6", 0, 6.0, court.farZ, "#f2c947", 32);
   drawWallLabel("4", 0, 2.1, court.farZ, "#f2c947", 32);
@@ -145,16 +148,91 @@ function drawCourt() {
   drawWallLabel("2", court.halfWidth, 6.0, 5.3, "#62a6ff", 25);
   drawWallLabel("1", court.halfWidth, 2.1, 5.3, "#62a6ff", 25);
 
-  const guideLength = size().height * 0.23;
-  const guideStartX = size().width / 2;
-  const guideStartY = size().height * 0.88;
-  const laneX = guideStartX + Math.sin(shotAngle) * guideLength;
-  const laneY = guideStartY - Math.cos(shotAngle) * guideLength;
+}
+
+function batterLayout() {
+  const feet = project(-0.44, 0, battingStumpsZ + 1.25);
+  const scale = Math.max(0.85, Math.min(1.28, feet.scale));
+  return {
+    feet,
+    scale,
+    // Right-handed Lohit's bat is held on screen-right when viewed from behind.
+    batContact: { x: feet.x + 43 * scale, y: feet.y - 67 * scale }
+  };
+}
+
+function drawShotGuide() {
+  const layout = batterLayout();
+  const guideLength = size().height * 0.25;
+  const endX = layout.batContact.x + Math.sin(shotAngle) * guideLength;
+  const endY = layout.batContact.y - Math.cos(shotAngle) * guideLength;
+  ctx.save();
   ctx.strokeStyle = "rgba(242, 201, 71, 0.9)";
   ctx.lineWidth = 2;
   ctx.setLineDash([5, 6]);
-  ctx.beginPath(); ctx.moveTo(guideStartX, guideStartY); ctx.lineTo(laneX, laneY); ctx.stroke();
-  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(layout.batContact.x, layout.batContact.y); ctx.lineTo(endX, endY); ctx.stroke();
+  ctx.restore();
+}
+
+function drawBatter() {
+  const { feet, scale, batContact } = batterLayout();
+  const s = scale;
+  const waistY = feet.y - 47 * s;
+  const shoulderY = feet.y - 98 * s;
+  const headY = feet.y - 118 * s;
+
+  // Ground shadow makes the player feel planted on the turf.
+  ctx.save();
+  ctx.fillStyle = "rgba(0, 0, 0, .38)";
+  ctx.beginPath(); ctx.ellipse(feet.x, feet.y + 3, 34 * s, 5 * s, 0, 0, Math.PI * 2); ctx.fill();
+
+  // Blue trousers, orange side stripe, and pale pads.
+  polygon([
+    { x: feet.x - 23 * s, y: waistY }, { x: feet.x - 5 * s, y: waistY },
+    { x: feet.x - 11 * s, y: feet.y }, { x: feet.x - 29 * s, y: feet.y }
+  ], "#0b4e96", "#092e5b", 1);
+  polygon([
+    { x: feet.x + 2 * s, y: waistY }, { x: feet.x + 20 * s, y: waistY },
+    { x: feet.x + 29 * s, y: feet.y }, { x: feet.x + 10 * s, y: feet.y }
+  ], "#0b4e96", "#092e5b", 1);
+  drawLine({ x: feet.x - 8 * s, y: waistY + 4 * s }, { x: feet.x - 18 * s, y: feet.y - 3 * s }, "#ef7e28", 3 * s);
+  drawLine({ x: feet.x + 11 * s, y: waistY + 4 * s }, { x: feet.x + 20 * s, y: feet.y - 3 * s }, "#ef7e28", 3 * s);
+  ctx.fillStyle = "#d7d8cf";
+  ctx.fillRect(feet.x - 29 * s, feet.y - 9 * s, 19 * s, 9 * s);
+  ctx.fillRect(feet.x + 10 * s, feet.y - 9 * s, 20 * s, 9 * s);
+
+  // Fictional blue-and-orange team jersey, viewed from behind.
+  polygon([
+    { x: feet.x - 32 * s, y: shoulderY + 8 * s }, { x: feet.x + 29 * s, y: shoulderY + 8 * s },
+    { x: feet.x + 24 * s, y: waistY + 7 * s }, { x: feet.x - 26 * s, y: waistY + 7 * s }
+  ], "#0754a3", "#062d5e", 1.2);
+  polygon([
+    { x: feet.x - 27 * s, y: waistY - 12 * s }, { x: feet.x + 25 * s, y: waistY - 12 * s },
+    { x: feet.x + 24 * s, y: waistY + 7 * s }, { x: feet.x - 26 * s, y: waistY + 7 * s }
+  ], "#ee7928");
+  ctx.fillStyle = "#f7f4dc";
+  ctx.font = `800 ${Math.max(9, 11 * s)}px system-ui`;
+  ctx.textAlign = "center";
+  ctx.fillText("LOHIT", feet.x - 1 * s, shoulderY + 32 * s);
+
+  // Helmet and neck.
+  ctx.fillStyle = "#b46a3a";
+  ctx.fillRect(feet.x - 7 * s, shoulderY - 4 * s, 14 * s, 13 * s);
+  ctx.fillStyle = "#0a4c92";
+  ctx.beginPath(); ctx.arc(feet.x - 2 * s, headY + 7 * s, 20 * s, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.fillRect(feet.x - 21 * s, headY + 6 * s, 38 * s, 13 * s);
+  drawLine({ x: feet.x + 16 * s, y: headY + 14 * s }, { x: feet.x + 28 * s, y: headY + 15 * s }, "#8fa2ad", 1.3 * s);
+
+  // Right arm, glove, and raised bat.
+  drawLine({ x: feet.x + 22 * s, y: shoulderY + 18 * s }, { x: feet.x + 39 * s, y: waistY - 12 * s }, "#0754a3", 11 * s);
+  ctx.fillStyle = "#d9ded9";
+  ctx.beginPath(); ctx.arc(feet.x + 40 * s, waistY - 13 * s, 7 * s, 0, Math.PI * 2); ctx.fill();
+  drawLine({ x: feet.x + 41 * s, y: waistY - 15 * s }, { x: batContact.x - 6 * s, y: batContact.y + 6 * s }, "#5d3415", 3 * s);
+  polygon([
+    { x: batContact.x - 7 * s, y: batContact.y + 9 * s }, { x: batContact.x + 8 * s, y: batContact.y + 13 * s },
+    { x: batContact.x + 39 * s, y: batContact.y - 51 * s }, { x: batContact.x + 22 * s, y: batContact.y - 56 * s }
+  ], "#d6ab72", "#875b2b", 1.2);
+  ctx.restore();
 }
 
 function fillClippedPolygon(points, fill) {
