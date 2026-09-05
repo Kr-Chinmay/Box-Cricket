@@ -8,9 +8,9 @@ const scoreElement = document.getElementById("score");
 const statusElement = document.getElementById("status");
 
 const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
-// Compact box-cricket pitch: the bowling end is deliberately 35% closer than the first prototype.
+// Compact underarm box-cricket pitch: the bowling end is deliberately much closer than the first prototype.
 const battingStumpsZ = -7.5;
-const bowlingStumpsZ = 5.3;
+const bowlingStumpsZ = 3.0;
 // Ball is deliberately 60% of the original prototype size, both visually and physically.
 const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.096 };
 let shotAngle = 0;
