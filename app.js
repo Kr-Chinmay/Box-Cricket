@@ -36,16 +36,23 @@ function size() {
   return { width: rect.width, height: rect.height };
 }
 
-// Low wicketkeeper-view projection used by the portrait Arena V1.
+// Eye-level wicketkeeper-view projection. The virtual camera is behind the batting stumps,
+// around a batter's head height, and tilted slightly towards the far end of the court.
 function project(x, y, z) {
   const { width, height } = size();
-  const depth = (z - court.nearZ) / (court.farZ - court.nearZ);
-  const scale = 1.34 - depth * 0.77;
+  const cameraHeight = 5.3;
+  const cameraZ = -16;
+  const pitch = -0.205;
+  const dy = y - cameraHeight;
+  const dz = z - cameraZ;
+  // Rotate the court into the camera's slightly downward viewing direction.
+  const viewY = dy * Math.cos(pitch) - dz * Math.sin(pitch);
+  const viewZ = Math.max(0.5, dy * Math.sin(pitch) + dz * Math.cos(pitch));
+  const focal = height * 0.55;
+  const scale = Math.min(1.65, 14 / viewZ);
   return {
-    // Wide at the batting end, narrowing towards the scoring wall.
-    x: width / 2 + x * width * 0.04 * scale,
-    // A lower camera puts the far court lower in the screen and leaves room for the roof.
-    y: height * (0.93 - depth * 0.46) - y * height * 0.042 * scale,
+    x: width / 2 + x / viewZ * focal,
+    y: height * 0.5 - viewY / viewZ * focal,
     scale
   };
 }
