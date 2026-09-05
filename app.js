@@ -8,8 +8,11 @@ const scoreElement = document.getElementById("score");
 const statusElement = document.getElementById("status");
 
 const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
+// Compact box-cricket pitch: the bowling end is deliberately 35% closer than the first prototype.
+const battingStumpsZ = -7.5;
+const bowlingStumpsZ = 5.3;
 // Ball is deliberately 60% of the original prototype size, both visually and physically.
-const ball = { x: 0, y: 1.25, z: -7.5, vx: 0, vy: 0, vz: 0, radius: 0.096 };
+const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.096 };
 let shotAngle = 0;
 let swipeStart = null;
 let loftSelected = false;
@@ -120,20 +123,20 @@ function drawCourt() {
   drawNeonLine(farLeft, farRight, "#d5b62a", 2);
 
   // Pitch and creases.
-  const pitchNearLeft = project(-1.6, 0.02, -7.2);
-  const pitchNearRight = project(1.6, 0.02, -7.2);
-  const pitchFarRight = project(1.6, 0.02, 12.2);
-  const pitchFarLeft = project(-1.6, 0.02, 12.2);
+  const pitchNearLeft = project(-1.6, 0.02, battingStumpsZ + 0.3);
+  const pitchNearRight = project(1.6, 0.02, battingStumpsZ + 0.3);
+  const pitchFarRight = project(1.6, 0.02, bowlingStumpsZ);
+  const pitchFarLeft = project(-1.6, 0.02, bowlingStumpsZ);
   polygon([pitchNearLeft, pitchNearRight, pitchFarRight, pitchFarLeft], "rgba(146, 161, 92, 0.25)");
   // Batting crease: bowling crease under the stumps, popping crease in front, and return creases either side.
-  drawLine(project(-2.2, 0.03, -7.5), project(2.2, 0.03, -7.5), "#f6f6e8", 2.4);
-  drawLine(project(-2.2, 0.03, -6.25), project(2.2, 0.03, -6.25), "#f6f6e8", 1.8);
-  drawLine(project(-2.2, 0.03, -9.0), project(-2.2, 0.03, -6.25), "#f6f6e8", 1.8);
-  drawLine(project(2.2, 0.03, -9.0), project(2.2, 0.03, -6.25), "#f6f6e8", 1.8);
-  drawLine(project(-2.2, 0.03, 12.2), project(2.2, 0.03, 12.2), "#f6f6e8", 1.6);
+  drawLine(project(-2.2, 0.03, battingStumpsZ), project(2.2, 0.03, battingStumpsZ), "#f6f6e8", 2.4);
+  drawLine(project(-2.2, 0.03, battingStumpsZ + 1.25), project(2.2, 0.03, battingStumpsZ + 1.25), "#f6f6e8", 1.8);
+  drawLine(project(-2.2, 0.03, battingStumpsZ - 1.5), project(-2.2, 0.03, battingStumpsZ + 1.25), "#f6f6e8", 1.8);
+  drawLine(project(2.2, 0.03, battingStumpsZ - 1.5), project(2.2, 0.03, battingStumpsZ + 1.25), "#f6f6e8", 1.8);
+  drawLine(project(-2.2, 0.03, bowlingStumpsZ), project(2.2, 0.03, bowlingStumpsZ), "#f6f6e8", 1.8);
 
-  drawWicket(-7.5, 1.5);
-  drawWicket(12.2, 1.18);
+  drawWicket(battingStumpsZ, 1.5);
+  drawWicket(bowlingStumpsZ, 1.18);
 
   drawWallLabel("6", 0, 6.0, court.farZ, "#f2c947", 32);
   drawWallLabel("4", 0, 2.1, court.farZ, "#f2c947", 32);
@@ -359,7 +362,7 @@ function launchBall(angle) {
   const timing = getTimingResult(timingPosition);
   // Freeze the marker where the player pressed Launch so the result remains visible.
   timingRunning = false;
-  ball.x = 0; ball.y = 1.25; ball.z = -7.5;
+  ball.x = 0; ball.y = 1.25; ball.z = battingStumpsZ;
   // Timing affects accuracy and power. Later, poor timing will also allow misses and catches.
   const shotSpeed = 20.5 * timing.power;
   ball.vx = Math.sin(angle) * shotSpeed * timing.accuracy;
@@ -388,7 +391,7 @@ function updateTimingGauge(now) {
 }
 
 function resetBall(message) {
-  ball.x = 0; ball.y = 1.25; ball.z = -7.5;
+  ball.x = 0; ball.y = 1.25; ball.z = battingStumpsZ;
   ball.vx = ball.vy = ball.vz = 0;
   inPlay = false;
   timingRunning = true;
