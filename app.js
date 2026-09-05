@@ -465,7 +465,10 @@ function frame(now) {
 canvas.addEventListener("pointerdown", startSwipe);
 canvas.addEventListener("pointermove", previewSwipe);
 canvas.addEventListener("pointerup", finishSwipe);
-canvas.addEventListener("pointercancel", () => { swipeStart = null; });
+canvas.addEventListener("pointercancel", () => {
+  swipeStart = null;
+  if (!inPlay) statusElement.textContent = "Swipe forward in the court to play a shot.";
+});
 loftButton.addEventListener("click", toggleLoft);
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();

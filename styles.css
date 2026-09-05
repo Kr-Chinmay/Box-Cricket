@@ -42,7 +42,9 @@ canvas {
   border-radius: 18px;
   background: #030604;
   box-shadow: 0 18px 52px rgba(0, 0, 0, 0.45);
-  touch-action: manipulation;
+  /* The court owns vertical swipes; otherwise Android Chrome cancels a shot to scroll the page. */
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 
 .controls { padding: 14px 4px 0; text-align: center; }
