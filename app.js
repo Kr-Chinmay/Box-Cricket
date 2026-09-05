@@ -44,7 +44,8 @@ function project(x, y, z) {
   return {
     // Wide at the batting end, narrowing towards the scoring wall.
     x: width / 2 + x * width * 0.04 * scale,
-    y: height * (0.91 - depth * 0.55) - y * height * 0.065 * scale,
+    // A lower camera puts the far court lower in the screen and leaves room for the roof.
+    y: height * (0.93 - depth * 0.46) - y * height * 0.042 * scale,
     scale
   };
 }
@@ -76,7 +77,8 @@ function drawCourt() {
   const leftTopNear = project(-court.halfWidth, court.ceiling, court.nearZ);
   const rightTopNear = project(court.halfWidth, court.ceiling, court.nearZ);
 
-  // Dark indoor ceiling with receding LED light rows gives the court depth and atmosphere.
+  // The roof fills the upper arena, not merely a thin strip above the front wall.
+  drawArenaRoof();
   polygon([leftTopNear, rightTopNear, frontTopRight, frontTopLeft], "#030405");
   drawCeilingLights();
 
@@ -88,23 +90,23 @@ function drawCourt() {
   polygon([nearLeft, nearRight, farRight, farLeft], null, "#6f9b4d", 1.2);
   drawTurfStripes();
 
-  // Charcoal professional side walls, with blue on the off side and amber on the leg side.
+  // Camera is behind a right-handed batter: screen left is leg side; screen right is off side.
   const leftMiddleNear = project(-court.halfWidth, 4, court.nearZ);
   const leftMiddleFar = project(-court.halfWidth, 4, court.farZ);
   const rightMiddleNear = project(court.halfWidth, 4, court.nearZ);
   const rightMiddleFar = project(court.halfWidth, 4, court.farZ);
-  polygon([nearLeft, farLeft, leftMiddleFar, leftMiddleNear], "#101419", "#1383ff", 1.2);
-  polygon([leftMiddleNear, leftMiddleFar, frontTopLeft, leftTopNear], "#0d1014", "#0d62cb", 1.2);
-  polygon([nearRight, rightMiddleNear, rightMiddleFar, farRight], "#17120e", "#ff7b24", 1.2);
-  polygon([rightMiddleNear, rightTopNear, frontTopRight, rightMiddleFar], "#110e0c", "#b94b14", 1.2);
+  polygon([nearLeft, farLeft, leftMiddleFar, leftMiddleNear], "#17120e", "#ff7b24", 1.2);
+  polygon([leftMiddleNear, leftMiddleFar, frontTopLeft, leftTopNear], "#110e0c", "#b94b14", 1.2);
+  polygon([nearRight, rightMiddleNear, rightMiddleFar, farRight], "#101419", "#1383ff", 1.2);
+  polygon([rightMiddleNear, rightTopNear, frontTopRight, rightMiddleFar], "#0d1014", "#0d62cb", 1.2);
   polygon([farLeft, farRight, frontTopRight, frontTopLeft], "#121518", "#d7b72d", 1.6);
 
   drawFrontWallLights();
   // Neon framework and gold scoring dividers distinguish all scoring zones.
-  drawNeonLine(nearLeft, farLeft, "#147eff", 3);
-  drawNeonLine(leftTopNear, frontTopLeft, "#147eff", 3);
-  drawNeonLine(nearRight, farRight, "#ff7924", 3);
-  drawNeonLine(rightTopNear, frontTopRight, "#ff7924", 3);
+  drawNeonLine(nearLeft, farLeft, "#ff7924", 3);
+  drawNeonLine(leftTopNear, frontTopLeft, "#ff7924", 3);
+  drawNeonLine(nearRight, farRight, "#147eff", 3);
+  drawNeonLine(rightTopNear, frontTopRight, "#147eff", 3);
   drawNeonLine(leftMiddleNear, leftMiddleFar, "#d5b62a", 2);
   drawNeonLine(rightMiddleNear, rightMiddleFar, "#d5b62a", 2);
   drawNeonLine(farLeft, farRight, "#d5b62a", 2);
@@ -124,10 +126,10 @@ function drawCourt() {
 
   drawWallLabel("6", 0, 6.0, court.farZ, "#f2c947", 32);
   drawWallLabel("4", 0, 2.1, court.farZ, "#f2c947", 32);
-  drawWallLabel("2", -court.halfWidth, 6.0, 5.3, "#62a6ff", 25);
-  drawWallLabel("1", -court.halfWidth, 2.1, 5.3, "#62a6ff", 25);
-  drawWallLabel("2", court.halfWidth, 6.0, 5.3, "#ffad65", 25);
-  drawWallLabel("1", court.halfWidth, 2.1, 5.3, "#ffad65", 25);
+  drawWallLabel("2", -court.halfWidth, 6.0, 5.3, "#ffad65", 25);
+  drawWallLabel("1", -court.halfWidth, 2.1, 5.3, "#ffad65", 25);
+  drawWallLabel("2", court.halfWidth, 6.0, 5.3, "#62a6ff", 25);
+  drawWallLabel("1", court.halfWidth, 2.1, 5.3, "#62a6ff", 25);
 
   const laneX = size().width / 2 + aim * size().width * 0.25;
   ctx.strokeStyle = "rgba(242, 201, 71, 0.9)";
@@ -148,23 +150,39 @@ function fillClippedPolygon(points, fill) {
   ctx.restore();
 }
 
-function drawCeilingLights() {
-  [-9, -6, -3, 0, 3, 6, 9, 12, 15].forEach((z) => {
-    [-6.3, -3.15, 0, 3.15, 6.3].forEach((x) => drawCeilingLight(x, z));
-  });
+function drawArenaRoof() {
+  const { width, height } = size();
+  const roof = ctx.createLinearGradient(0, 0, 0, height * 0.54);
+  roof.addColorStop(0, "#010202");
+  roof.addColorStop(0.62, "#030506");
+  roof.addColorStop(1, "#0a0d0e");
+  ctx.fillStyle = roof;
+  ctx.fillRect(0, 0, width, height * 0.56);
 }
 
-function drawCeilingLight(x, z) {
-  const point = project(x, court.ceiling - 0.12, z);
-  const radius = Math.max(1.2, 3.2 * point.scale);
-  const glow = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius * 3.6);
+function drawCeilingLights() {
+  const { width, height } = size();
+  // These rows begin large above the wicketkeeper and converge towards the front wall.
+  for (let row = 0; row < 10; row += 1) {
+    const depth = row / 9;
+    const y = height * (0.075 + depth * 0.285);
+    const spread = width * (0.43 * Math.pow(1 - depth, 1.32) + 0.016);
+    [-1, -0.48, 0, 0.48, 1].forEach((column) => {
+      drawCeilingLight(width / 2 + column * spread, y, depth);
+    });
+  }
+}
+
+function drawCeilingLight(x, y, depth) {
+  const radius = Math.max(1.15, 4.8 * (1 - depth) + 1.2);
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, radius * 3.6);
   glow.addColorStop(0, "rgba(255, 252, 215, .98)");
   glow.addColorStop(0.22, "rgba(255, 240, 170, .74)");
   glow.addColorStop(1, "rgba(255, 238, 153, 0)");
   ctx.fillStyle = glow;
-  ctx.beginPath(); ctx.arc(point.x, point.y, radius * 3.6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, radius * 3.6, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = "#fff9da";
-  ctx.beginPath(); ctx.arc(point.x, point.y, radius, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
 }
 
 function drawFrontWallLights() {
@@ -334,7 +352,7 @@ function toggleLoft() {
 }
 
 function showShotSelection() {
-  const lane = aim < -0.25 ? "Off-side" : aim > 0.25 ? "Leg-side" : "Straight";
+  const lane = aim < -0.25 ? "Leg-side" : aim > 0.25 ? "Off-side" : "Straight";
   statusElement.textContent = `${lane} lane selected — ${loftSelected ? "lofted" : "grounded"} shot ready.`;
 }
 
