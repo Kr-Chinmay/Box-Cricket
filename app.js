@@ -15,7 +15,7 @@ lohitSprite.onload = () => {
   lohitSpriteClean = removeBakedCheckerboard(lohitSprite);
   lohitSpriteReady = true;
 };
-lohitSprite.src = "lohit-batter-stance-v2.png";
+lohitSprite.src = "lohit-batter-backlift-v1.png";
 
 const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
 // Compact underarm box-cricket pitch: the bowling end is deliberately much closer than the first prototype.
@@ -179,9 +179,9 @@ function batterLayout() {
     spriteY,
     spriteWidth,
     spriteHeight,
-    // Right-handed Lohit's bat is diagonal on screen-right when viewed from behind.
+    // Right-handed Lohit's bat is in a small, bowler-facing diagonal backlift on screen-right.
     batContact: lohitSpriteReady
-      ? { x: spriteX + spriteWidth * 0.67, y: spriteY + spriteHeight * 0.64 }
+      ? { x: spriteX + spriteWidth * 0.63, y: spriteY + spriteHeight * 0.47 }
       : { x: feet.x + 43 * scale, y: feet.y - 67 * scale }
   };
 }
