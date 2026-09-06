@@ -164,8 +164,8 @@ function drawCourt() {
 }
 
 function batterLayout() {
-  // Stand just behind the popping crease: one foot reads inside it and the forward foot outside it.
-  const feet = project(-0.44, 0, battingStumpsZ + 0.68);
+  // Stand close to the batting stumps: the right/back foot remains within the popping crease.
+  const feet = project(-0.44, 0, battingStumpsZ + 0.15);
   const scale = Math.max(0.85, Math.min(1.28, feet.scale));
   // Keep Lohit compact relative to the enlarged foreground wicket, as in the approved arena view.
   const spriteHeight = 132 * scale;
