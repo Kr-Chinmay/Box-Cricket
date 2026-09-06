@@ -134,7 +134,7 @@ function drawCourt() {
   drawNeonLine(rightMiddleNear, rightMiddleFar, "#d5b62a", 2);
   drawNeonLine(farLeft, farRight, "#d5b62a", 2);
   // Front-wall scoring divider: 4 below this line, 6 above it.
-  drawNeonLine(frontMiddleLeft, frontMiddleRight, "#d5b62a", 2);
+  drawNeonLine(frontMiddleLeft, frontMiddleRight, "#ffe26a", 4);
 
   // Pitch and creases.
   const pitchNearLeft = project(-1.6, 0.02, battingStumpsZ + 0.3);
