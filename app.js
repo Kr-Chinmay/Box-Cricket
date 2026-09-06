@@ -124,7 +124,6 @@ function drawCourt() {
   polygon([rightMiddleNear, rightTopNear, frontTopRight, rightMiddleFar], "#0d1014", "#0d62cb", 1.2);
   polygon([farLeft, farRight, frontTopRight, frontTopLeft], "#121518", "#d7b72d", 1.6);
 
-  drawFrontWallLights();
   // Neon framework and gold scoring dividers distinguish all scoring zones.
   drawNeonLine(nearLeft, farLeft, "#ff7924", 3);
   drawNeonLine(leftTopNear, frontTopLeft, "#ff7924", 3);
@@ -399,17 +398,6 @@ function drawRoofChannels() {
     ctx.strokeStyle = "rgba(70, 75, 76, .32)";
     ctx.lineWidth = position === 0 ? 1.3 : 0.8;
     ctx.stroke();
-  });
-}
-
-function drawFrontWallLights() {
-  [-5.6, -2.8, 0, 2.8, 5.6].forEach((x) => {
-    const point = project(x, 3.9, court.farZ - 0.02);
-    const glow = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, 24 * point.scale);
-    glow.addColorStop(0, "rgba(255, 246, 202, .26)");
-    glow.addColorStop(1, "rgba(255, 246, 202, 0)");
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(point.x, point.y, 24 * point.scale, 0, Math.PI * 2); ctx.fill();
   });
 }
 
