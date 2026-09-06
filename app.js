@@ -9,7 +9,7 @@ const statusElement = document.getElementById("status");
 const lohitSprite = new Image();
 let lohitSpriteReady = false;
 lohitSprite.onload = () => { lohitSpriteReady = true; };
-lohitSprite.src = "lohit-batter-ready-v1.png";
+lohitSprite.src = "lohit-batter-stance-v2.png";
 
 const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
 // Compact underarm box-cricket pitch: the bowling end is deliberately much closer than the first prototype.
@@ -139,11 +139,11 @@ function drawCourt() {
   drawLine(project(2.2, 0.03, battingStumpsZ - 1.5), project(2.2, 0.03, battingStumpsZ + 1.25), "#f6f6e8", 1.8);
   drawLine(project(-2.2, 0.03, bowlingStumpsZ), project(2.2, 0.03, bowlingStumpsZ), "#f6f6e8", 1.8);
 
-  drawWicket(bowlingStumpsZ, 1.18);
+  drawWicket(bowlingStumpsZ, 1.45);
   drawShotGuide();
   drawBatter();
   // The batting wicket is closest to the camera, so it is drawn after the batter.
-  drawWicket(battingStumpsZ, 1.5);
+  drawWicket(battingStumpsZ, 2.0);
 
   drawWallLabel("6", 0, 6.0, court.farZ, "#f2c947", 32);
   drawWallLabel("4", 0, 2.1, court.farZ, "#f2c947", 32);
@@ -157,7 +157,8 @@ function drawCourt() {
 function batterLayout() {
   const feet = project(-0.44, 0, battingStumpsZ + 1.25);
   const scale = Math.max(0.85, Math.min(1.28, feet.scale));
-  const spriteHeight = 164 * scale;
+  // Keep Lohit compact relative to the enlarged foreground wicket, as in the approved arena view.
+  const spriteHeight = 132 * scale;
   const spriteWidth = spriteHeight * (2 / 3);
   const spriteX = feet.x - spriteWidth * 0.48;
   const spriteY = feet.y - spriteHeight;
@@ -168,9 +169,9 @@ function batterLayout() {
     spriteY,
     spriteWidth,
     spriteHeight,
-    // Right-handed Lohit's bat rests on screen-right when viewed from behind.
+    // Right-handed Lohit's bat is diagonal on screen-right when viewed from behind.
     batContact: lohitSpriteReady
-      ? { x: spriteX + spriteWidth * 0.70, y: spriteY + spriteHeight * 0.58 }
+      ? { x: spriteX + spriteWidth * 0.67, y: spriteY + spriteHeight * 0.64 }
       : { x: feet.x + 43 * scale, y: feet.y - 67 * scale }
   };
 }
@@ -194,17 +195,9 @@ function drawBatter() {
     return;
   }
   const { spriteX, spriteY, spriteWidth, spriteHeight } = batterLayout();
-  // The generator returned a dark studio backdrop. These two silhouette clips retain only Lohit and his bat.
-  // This is a proper waiting stance: flexed knees, planted feet, and a lowered bat.
-  drawSpriteMask(spriteX, spriteY, spriteWidth, spriteHeight, [
-    [0.52, 0.01], [0.72, 0.04], [0.79, 0.17], [0.74, 0.27], [0.72, 0.42],
-    [0.70, 0.55], [0.74, 0.72], [0.73, 0.94], [0.67, 0.99], [0.49, 0.99],
-    [0.46, 0.87], [0.38, 0.95], [0.17, 0.98], [0.12, 0.91], [0.21, 0.67],
-    [0.26, 0.53], [0.27, 0.38], [0.35, 0.22], [0.45, 0.13]
-  ]);
-  drawSpriteMask(spriteX, spriteY, spriteWidth, spriteHeight, [
-    [0.66, 0.49], [0.75, 0.47], [0.96, 0.94], [0.89, 0.99], [0.62, 0.64]
-  ]);
+  // This v2 sprite has a true transparent background, so rendering it directly preserves
+  // the natural 3D silhouette and the diagonal batting stance.
+  ctx.drawImage(lohitSprite, spriteX, spriteY, spriteWidth, spriteHeight);
 }
 
 function drawSpriteMask(x, y, width, height, points) {
