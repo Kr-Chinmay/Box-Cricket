@@ -95,6 +95,8 @@ function drawCourt() {
   const farRight = project(court.halfWidth, 0, court.farZ);
   const frontTopLeft = project(-court.halfWidth, court.ceiling, court.farZ);
   const frontTopRight = project(court.halfWidth, court.ceiling, court.farZ);
+  const frontMiddleLeft = project(-court.halfWidth, 4, court.farZ);
+  const frontMiddleRight = project(court.halfWidth, 4, court.farZ);
   const leftTopNear = project(-court.halfWidth, court.ceiling, court.nearZ);
   const rightTopNear = project(court.halfWidth, court.ceiling, court.nearZ);
 
@@ -131,6 +133,8 @@ function drawCourt() {
   drawNeonLine(leftMiddleNear, leftMiddleFar, "#d5b62a", 2);
   drawNeonLine(rightMiddleNear, rightMiddleFar, "#d5b62a", 2);
   drawNeonLine(farLeft, farRight, "#d5b62a", 2);
+  // Front-wall scoring divider: 4 below this line, 6 above it.
+  drawNeonLine(frontMiddleLeft, frontMiddleRight, "#d5b62a", 2);
 
   // Pitch and creases.
   const pitchNearLeft = project(-1.6, 0.02, battingStumpsZ + 0.3);
