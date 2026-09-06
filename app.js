@@ -8,7 +8,13 @@ const scoreElement = document.getElementById("score");
 const statusElement = document.getElementById("status");
 const lohitSprite = new Image();
 let lohitSpriteReady = false;
-lohitSprite.onload = () => { lohitSpriteReady = true; };
+let lohitSpriteClean = null;
+lohitSprite.onload = () => {
+  // The source image contains a pale checkerboard baked into its pixels, rather than alpha.
+  // Remove only the edge-connected neutral checkerboard so Lohit's white pads stay intact.
+  lohitSpriteClean = removeBakedCheckerboard(lohitSprite);
+  lohitSpriteReady = true;
+};
 lohitSprite.src = "lohit-batter-stance-v2.png";
 
 const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
@@ -195,9 +201,64 @@ function drawBatter() {
     return;
   }
   const { spriteX, spriteY, spriteWidth, spriteHeight } = batterLayout();
-  // This v2 sprite has a true transparent background, so rendering it directly preserves
-  // the natural 3D silhouette and the diagonal batting stance.
-  ctx.drawImage(lohitSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+  // Draw the cleaned sprite directly so the natural 3D silhouette and diagonal bat remain intact.
+  ctx.drawImage(lohitSpriteClean || lohitSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+}
+
+function removeBakedCheckerboard(image) {
+  const source = document.createElement("canvas");
+  source.width = image.naturalWidth;
+  source.height = image.naturalHeight;
+  const sourceContext = source.getContext("2d", { willReadFrequently: true });
+  sourceContext.drawImage(image, 0, 0);
+  const pixels = sourceContext.getImageData(0, 0, source.width, source.height);
+  const { data, width, height } = pixels;
+  const checked = new Uint8Array(width * height);
+  const queue = [];
+
+  const isPaleNeutral = (index) => {
+    const offset = index * 4;
+    const red = data[offset];
+    const green = data[offset + 1];
+    const blue = data[offset + 2];
+    const darkest = Math.min(red, green, blue);
+    const lightest = Math.max(red, green, blue);
+    // The baked checkerboard is near-white and almost colourless. Skin, wood, blue kit,
+    // orange kit, and the shaded parts of the white pads do not meet this test.
+    return darkest > 214 && lightest - darkest < 15;
+  };
+
+  const addIfBackground = (index) => {
+    if (!checked[index] && isPaleNeutral(index)) {
+      checked[index] = 1;
+      queue.push(index);
+    }
+  };
+
+  for (let x = 0; x < width; x += 1) {
+    addIfBackground(x);
+    addIfBackground((height - 1) * width + x);
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    addIfBackground(y * width);
+    addIfBackground(y * width + width - 1);
+  }
+
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const index = queue[cursor];
+    const x = index % width;
+    const y = Math.floor(index / width);
+    if (x > 0) addIfBackground(index - 1);
+    if (x < width - 1) addIfBackground(index + 1);
+    if (y > 0) addIfBackground(index - width);
+    if (y < height - 1) addIfBackground(index + width);
+  }
+
+  checked.forEach((isBackground, index) => {
+    if (isBackground) data[index * 4 + 3] = 0;
+  });
+  sourceContext.putImageData(pixels, 0, 0);
+  return source;
 }
 
 function drawSpriteMask(x, y, width, height, points) {
