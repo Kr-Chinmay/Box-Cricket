@@ -21,7 +21,7 @@ const bowlerSprite = new Image();
 let bowlerSpriteReady = false;
 let bowlerSpriteClean = null;
 bowlerSprite.onload = () => {
-  bowlerSpriteClean = removeBakedCheckerboard(bowlerSprite);
+  bowlerSpriteClean = removeBakedCheckerboard(bowlerSprite, 190);
   bowlerSpriteReady = true;
 };
 bowlerSprite.src = "underarm-bowler-yellow-v1.png";
@@ -222,17 +222,26 @@ function drawBatter() {
 
 function drawBowler() {
   if (!bowlerSpriteReady) return;
-  // He remains beyond the bowling crease, facing Lohit, until the delivery animation is added.
-  const feet = project(0, 0, bowlingStumpsZ + 1.1);
+  // A right-arm bowler operates over the wicket from the batter's leg-side (screen-left).
+  // He remains beyond the bowling crease, facing Lohit, with no run-up.
+  const feet = project(-1.05, 0, bowlingStumpsZ + 0.8);
   const scale = Math.max(0.72, Math.min(1.05, feet.scale));
-  const spriteHeight = 106 * scale;
+  const spriteHeight = 76 * scale;
   const spriteWidth = spriteHeight * (2 / 3);
   const spriteX = feet.x - spriteWidth / 2;
   const spriteY = feet.y - spriteHeight;
-  ctx.drawImage(bowlerSpriteClean || bowlerSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+  // The asset's pale checkerboard needs a second, tight silhouette clip at game scale.
+  drawMaskedImage(bowlerSpriteClean || bowlerSprite, spriteX, spriteY, spriteWidth, spriteHeight, [
+    [0.41, 0.12], [0.54, 0.13], [0.61, 0.19], [0.68, 0.26], [0.73, 0.37],
+    [0.78, 0.49], [0.76, 0.58], [0.69, 0.64], [0.67, 0.76], [0.68, 0.91],
+    [0.62, 0.96], [0.47, 0.96], [0.45, 0.84], [0.40, 0.96], [0.28, 0.96],
+    [0.25, 0.90], [0.30, 0.73], [0.33, 0.57], [0.40, 0.68], [0.47, 0.69],
+    [0.50, 0.63], [0.46, 0.48], [0.29, 0.42], [0.22, 0.32], [0.24, 0.25],
+    [0.33, 0.19]
+  ]);
 }
 
-function removeBakedCheckerboard(image) {
+function removeBakedCheckerboard(image, minimumBrightness = 214) {
   const source = document.createElement("canvas");
   source.width = image.naturalWidth;
   source.height = image.naturalHeight;
@@ -252,7 +261,7 @@ function removeBakedCheckerboard(image) {
     const lightest = Math.max(red, green, blue);
     // The baked checkerboard is near-white and almost colourless. Skin, wood, blue kit,
     // orange kit, and the shaded parts of the white pads do not meet this test.
-    return darkest > 214 && lightest - darkest < 15;
+    return darkest > minimumBrightness && lightest - darkest < 15;
   };
 
   const addIfBackground = (index) => {
@@ -289,6 +298,10 @@ function removeBakedCheckerboard(image) {
 }
 
 function drawSpriteMask(x, y, width, height, points) {
+  drawMaskedImage(lohitSprite, x, y, width, height, points);
+}
+
+function drawMaskedImage(image, x, y, width, height, points) {
   ctx.save();
   ctx.beginPath();
   points.forEach(([px, py], index) => {
@@ -298,7 +311,7 @@ function drawSpriteMask(x, y, width, height, points) {
   });
   ctx.closePath();
   ctx.clip();
-  ctx.drawImage(lohitSprite, x, y, width, height);
+  ctx.drawImage(image, x, y, width, height);
   ctx.restore();
 }
 
