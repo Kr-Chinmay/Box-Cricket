@@ -21,10 +21,10 @@ const bowlerSprite = new Image();
 let bowlerSpriteReady = false;
 let bowlerSpriteClean = null;
 bowlerSprite.onload = () => {
-  bowlerSpriteClean = removeBakedCheckerboard(bowlerSprite, 190);
+  bowlerSpriteClean = removeChromaMagenta(bowlerSprite);
   bowlerSpriteReady = true;
 };
-bowlerSprite.src = "underarm-bowler-yellow-v1.png";
+bowlerSprite.src = "underarm-bowler-yellow-v2.png";
 
 const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
 // Compact underarm box-cricket pitch: the bowling end is deliberately much closer than the first prototype.
@@ -229,17 +229,32 @@ function drawBowler() {
   const spriteHeight = 76 * scale;
   const spriteWidth = spriteHeight * (2 / 3);
   const spriteX = feet.x - spriteWidth / 2;
-  // The generated image has bottom margin; this anchors its actual shoes on the turf.
-  const spriteY = feet.y - spriteHeight * 0.87;
-  // The asset's pale checkerboard needs a second, tight silhouette clip at game scale.
-  drawMaskedImage(bowlerSpriteClean || bowlerSprite, spriteX, spriteY, spriteWidth, spriteHeight, [
-    [0.40, 0.11], [0.56, 0.12], [0.64, 0.18], [0.71, 0.25], [0.78, 0.35],
-    [0.82, 0.49], [0.80, 0.58], [0.73, 0.65], [0.70, 0.76], [0.71, 0.91],
-    [0.65, 0.97], [0.46, 0.97], [0.44, 0.83], [0.39, 0.97], [0.25, 0.97],
-    [0.21, 0.91], [0.28, 0.72], [0.31, 0.55], [0.36, 0.48], [0.35, 0.62],
-    [0.42, 0.72], [0.50, 0.72], [0.54, 0.65], [0.48, 0.49], [0.28, 0.44],
-    [0.18, 0.33], [0.20, 0.24], [0.31, 0.18]
-  ]);
+  // The generated image has a small bottom margin; this anchors its actual shoes on the turf.
+  const spriteY = feet.y - spriteHeight * 0.92;
+  ctx.drawImage(bowlerSpriteClean || bowlerSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+}
+
+function removeChromaMagenta(image) {
+  const source = document.createElement("canvas");
+  source.width = image.naturalWidth;
+  source.height = image.naturalHeight;
+  const sourceContext = source.getContext("2d", { willReadFrequently: true });
+  sourceContext.drawImage(image, 0, 0);
+  const pixels = sourceContext.getImageData(0, 0, source.width, source.height);
+  const { data } = pixels;
+
+  for (let offset = 0; offset < data.length; offset += 4) {
+    const red = data[offset];
+    const green = data[offset + 1];
+    const blue = data[offset + 2];
+    // Only the deliberately magenta keyed backdrop has both strong red/blue and very little green.
+    if (red > 170 && blue > 120 && green < 115 && red - green > 95 && blue - green > 55) {
+      data[offset + 3] = 0;
+    }
+  }
+
+  sourceContext.putImageData(pixels, 0, 0);
+  return source;
 }
 
 function removeBakedCheckerboard(image, minimumBrightness = 214) {
