@@ -156,8 +156,9 @@ function drawCourt() {
   drawLine(project(-2.2, 0.03, battingStumpsZ + 1.25), project(2.2, 0.03, battingStumpsZ + 1.25), "#f6f6e8", 1.8);
   drawLine(project(-2.2, 0.03, battingStumpsZ - 1.5), project(-2.2, 0.03, battingStumpsZ + 1.25), "#f6f6e8", 1.8);
   drawLine(project(2.2, 0.03, battingStumpsZ - 1.5), project(2.2, 0.03, battingStumpsZ + 1.25), "#f6f6e8", 1.8);
-  // Bowling end: stump-line, popping crease towards the batter, and the two return creases.
-  drawLine(project(-2.2, 0.03, bowlingStumpsZ), project(2.2, 0.03, bowlingStumpsZ), "#f6f6e8", 2.4);
+  // Bowling end: short stump-line, wider popping crease towards Lohit, and two return creases.
+  // This mirrors the natural far-end geometry in the approved underarm-bowling reference.
+  drawLine(project(-1.35, 0.03, bowlingStumpsZ), project(1.35, 0.03, bowlingStumpsZ), "#f6f6e8", 2.4);
   drawLine(project(-2.2, 0.03, bowlingPoppingCreaseZ), project(2.2, 0.03, bowlingPoppingCreaseZ), "#f6f6e8", 1.8);
   drawLine(project(-2.2, 0.03, bowlingPoppingCreaseZ), project(-2.2, 0.03, bowlingStumpsZ + 0.65), "#f6f6e8", 1.8);
   drawLine(project(2.2, 0.03, bowlingPoppingCreaseZ), project(2.2, 0.03, bowlingStumpsZ + 0.65), "#f6f6e8", 1.8);
@@ -229,8 +230,8 @@ function drawBowler() {
   if (!bowlerSpriteReady) return;
   // In this wicketkeeper-view layout, over the wicket is the screen-right side of the far stumps.
   // He remains beyond the bowling crease, facing Lohit, with no run-up.
-  // Anchor the forward foot at the popping crease; the naturally trailing foot reads back towards the stump-line.
-  const feet = project(1.05, 0, bowlingPoppingCreaseZ);
+  // He delivers over the wicket to screen-right: back foot by the stump-line, forward foot close behind popping crease.
+  const feet = project(1.65, 0, bowlingStumpsZ + 0.15);
   const scale = Math.max(0.72, Math.min(1.05, feet.scale));
   const spriteHeight = 76 * scale;
   const spriteWidth = spriteHeight * (2 / 3);
