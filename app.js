@@ -30,6 +30,7 @@ const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
 // Compact underarm box-cricket pitch: the bowling end is deliberately much closer than the first prototype.
 const battingStumpsZ = -7.5;
 const bowlingStumpsZ = 3.0;
+const bowlingPoppingCreaseZ = bowlingStumpsZ - 1.25;
 // Ball is reduced again for the compact underarm court, both visually and physically.
 const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.0672 };
 let shotAngle = 0;
@@ -155,9 +156,13 @@ function drawCourt() {
   drawLine(project(-2.2, 0.03, battingStumpsZ + 1.25), project(2.2, 0.03, battingStumpsZ + 1.25), "#f6f6e8", 1.8);
   drawLine(project(-2.2, 0.03, battingStumpsZ - 1.5), project(-2.2, 0.03, battingStumpsZ + 1.25), "#f6f6e8", 1.8);
   drawLine(project(2.2, 0.03, battingStumpsZ - 1.5), project(2.2, 0.03, battingStumpsZ + 1.25), "#f6f6e8", 1.8);
-  drawLine(project(-2.2, 0.03, bowlingStumpsZ), project(2.2, 0.03, bowlingStumpsZ), "#f6f6e8", 1.8);
+  // Bowling end: stump-line, popping crease towards the batter, and the two return creases.
+  drawLine(project(-2.2, 0.03, bowlingStumpsZ), project(2.2, 0.03, bowlingStumpsZ), "#f6f6e8", 2.4);
+  drawLine(project(-2.2, 0.03, bowlingPoppingCreaseZ), project(2.2, 0.03, bowlingPoppingCreaseZ), "#f6f6e8", 1.8);
+  drawLine(project(-2.2, 0.03, bowlingPoppingCreaseZ), project(-2.2, 0.03, bowlingStumpsZ + 0.65), "#f6f6e8", 1.8);
+  drawLine(project(2.2, 0.03, bowlingPoppingCreaseZ), project(2.2, 0.03, bowlingStumpsZ + 0.65), "#f6f6e8", 1.8);
 
-  // The stationary underarm bowler stands behind the far wicket. There is deliberately no run-up.
+  // The stationary underarm bowler is placed at the far bowling crease. There is deliberately no run-up.
   drawBowler();
   drawWicket(bowlingStumpsZ, 1.45);
   drawShotGuide();
@@ -224,7 +229,8 @@ function drawBowler() {
   if (!bowlerSpriteReady) return;
   // In this wicketkeeper-view layout, over the wicket is the screen-right side of the far stumps.
   // He remains beyond the bowling crease, facing Lohit, with no run-up.
-  const feet = project(1.05, 0, bowlingStumpsZ + 0.8);
+  // Anchor the forward foot at the popping crease; the naturally trailing foot reads back towards the stump-line.
+  const feet = project(1.05, 0, bowlingPoppingCreaseZ);
   const scale = Math.max(0.72, Math.min(1.05, feet.scale));
   const spriteHeight = 76 * scale;
   const spriteWidth = spriteHeight * (2 / 3);
