@@ -222,22 +222,23 @@ function drawBatter() {
 
 function drawBowler() {
   if (!bowlerSpriteReady) return;
-  // A right-arm bowler operates over the wicket from the batter's leg-side (screen-left).
+  // In this wicketkeeper-view layout, over the wicket is the screen-right side of the far stumps.
   // He remains beyond the bowling crease, facing Lohit, with no run-up.
-  const feet = project(-1.05, 0, bowlingStumpsZ + 0.8);
+  const feet = project(1.05, 0, bowlingStumpsZ + 0.8);
   const scale = Math.max(0.72, Math.min(1.05, feet.scale));
   const spriteHeight = 76 * scale;
   const spriteWidth = spriteHeight * (2 / 3);
   const spriteX = feet.x - spriteWidth / 2;
-  const spriteY = feet.y - spriteHeight;
+  // The generated image has bottom margin; this anchors its actual shoes on the turf.
+  const spriteY = feet.y - spriteHeight * 0.87;
   // The asset's pale checkerboard needs a second, tight silhouette clip at game scale.
   drawMaskedImage(bowlerSpriteClean || bowlerSprite, spriteX, spriteY, spriteWidth, spriteHeight, [
-    [0.41, 0.12], [0.54, 0.13], [0.61, 0.19], [0.68, 0.26], [0.73, 0.37],
-    [0.78, 0.49], [0.76, 0.58], [0.69, 0.64], [0.67, 0.76], [0.68, 0.91],
-    [0.62, 0.96], [0.47, 0.96], [0.45, 0.84], [0.40, 0.96], [0.28, 0.96],
-    [0.25, 0.90], [0.30, 0.73], [0.33, 0.57], [0.40, 0.68], [0.47, 0.69],
-    [0.50, 0.63], [0.46, 0.48], [0.29, 0.42], [0.22, 0.32], [0.24, 0.25],
-    [0.33, 0.19]
+    [0.40, 0.11], [0.56, 0.12], [0.64, 0.18], [0.71, 0.25], [0.78, 0.35],
+    [0.82, 0.49], [0.80, 0.58], [0.73, 0.65], [0.70, 0.76], [0.71, 0.91],
+    [0.65, 0.97], [0.46, 0.97], [0.44, 0.83], [0.39, 0.97], [0.25, 0.97],
+    [0.21, 0.91], [0.28, 0.72], [0.31, 0.55], [0.36, 0.48], [0.35, 0.62],
+    [0.42, 0.72], [0.50, 0.72], [0.54, 0.65], [0.48, 0.49], [0.28, 0.44],
+    [0.18, 0.33], [0.20, 0.24], [0.31, 0.18]
   ]);
 }
 
