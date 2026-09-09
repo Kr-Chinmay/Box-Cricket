@@ -17,6 +17,15 @@ lohitSprite.onload = () => {
 };
 lohitSprite.src = "lohit-batter-backlift-v1.png";
 
+const bowlerSprite = new Image();
+let bowlerSpriteReady = false;
+let bowlerSpriteClean = null;
+bowlerSprite.onload = () => {
+  bowlerSpriteClean = removeBakedCheckerboard(bowlerSprite);
+  bowlerSpriteReady = true;
+};
+bowlerSprite.src = "underarm-bowler-yellow-v1.png";
+
 const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
 // Compact underarm box-cricket pitch: the bowling end is deliberately much closer than the first prototype.
 const battingStumpsZ = -7.5;
@@ -148,6 +157,8 @@ function drawCourt() {
   drawLine(project(2.2, 0.03, battingStumpsZ - 1.5), project(2.2, 0.03, battingStumpsZ + 1.25), "#f6f6e8", 1.8);
   drawLine(project(-2.2, 0.03, bowlingStumpsZ), project(2.2, 0.03, bowlingStumpsZ), "#f6f6e8", 1.8);
 
+  // The stationary underarm bowler stands behind the far wicket. There is deliberately no run-up.
+  drawBowler();
   drawWicket(bowlingStumpsZ, 1.45);
   drawShotGuide();
   drawBatter();
@@ -207,6 +218,18 @@ function drawBatter() {
   const { spriteX, spriteY, spriteWidth, spriteHeight } = batterLayout();
   // Draw the cleaned sprite directly so the natural 3D silhouette and diagonal bat remain intact.
   ctx.drawImage(lohitSpriteClean || lohitSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+}
+
+function drawBowler() {
+  if (!bowlerSpriteReady) return;
+  // He remains beyond the bowling crease, facing Lohit, until the delivery animation is added.
+  const feet = project(0, 0, bowlingStumpsZ + 1.1);
+  const scale = Math.max(0.72, Math.min(1.05, feet.scale));
+  const spriteHeight = 106 * scale;
+  const spriteWidth = spriteHeight * (2 / 3);
+  const spriteX = feet.x - spriteWidth / 2;
+  const spriteY = feet.y - spriteHeight;
+  ctx.drawImage(bowlerSpriteClean || bowlerSprite, spriteX, spriteY, spriteWidth, spriteHeight);
 }
 
 function removeBakedCheckerboard(image) {
