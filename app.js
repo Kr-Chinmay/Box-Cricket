@@ -236,8 +236,9 @@ function drawBowler() {
   if (!bowlerSpriteReady) return;
   // In this wicketkeeper-view layout, over the wicket is the screen-right side of the far stumps.
   // He remains beyond the bowling crease, facing Lohit, with no run-up.
-  // He delivers over the wicket from beside the far stumps, not from directly behind them.
-  const feet = project(2.05, 0, bowlingStumpsZ - 0.10);
+  // The lower screen-right shoe is his forward left foot: place it directly on the popping crease.
+  // The naturally higher screen-left shoe then reads as the trailing right foot beside the far stumps.
+  const feet = project(2.05, 0, bowlingPoppingCreaseZ);
   const scale = Math.max(0.72, Math.min(1.05, feet.scale));
   const spriteHeight = 76 * scale;
   const spriteWidth = spriteHeight * (2 / 3);
