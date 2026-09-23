@@ -14,6 +14,12 @@ lohitSprite.onload = () => {
   // Remove only the edge-connected neutral checkerboard so Lohit's white pads stay intact.
   lohitSpriteClean = removeBakedCheckerboard(lohitSprite);
   lohitSpriteReady = true;
+  // Reveal the arena only once there is a real 3D batter to draw—never the retired 2D fallback.
+  canvas.classList.remove("is-loading");
+};
+lohitSprite.onerror = () => {
+  // Avoid trapping the player on a blank page if a future deployment misses the image asset.
+  canvas.classList.remove("is-loading");
 };
 lohitSprite.src = "lohit-batter-backlift-v1.png";
 

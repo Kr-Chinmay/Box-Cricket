@@ -47,6 +47,9 @@ canvas {
   overscroll-behavior: contain;
 }
 
+/* Never let an old browser-painted canvas frame flash before the 3D batter is ready. */
+canvas.is-loading { visibility: hidden; }
+
 .controls { padding: 14px 4px 0; text-align: center; }
 #status { margin: 0 0 10px; min-height: 1.4em; color: #f3d37c; }
 .timing-panel { margin: 0 4px 12px; }
