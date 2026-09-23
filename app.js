@@ -166,8 +166,11 @@ function drawCourt() {
   // The stationary underarm bowler is placed at the far bowling crease. There is deliberately no run-up.
   drawBowler();
   drawWicket(bowlingStumpsZ, 1.45);
-  drawShotGuide();
-  drawBatter();
+  // Keep the arena clean while Lohit's 3D sprite loads—never show the old 2D fallback.
+  if (lohitSpriteReady) {
+    drawShotGuide();
+    drawBatter();
+  }
   // The batting wicket is closest to the camera, so it is drawn after the batter.
   drawWicket(battingStumpsZ, 2.0);
 
@@ -217,10 +220,7 @@ function drawShotGuide() {
 }
 
 function drawBatter() {
-  if (!lohitSpriteReady) {
-    drawBatterFallback();
-    return;
-  }
+  if (!lohitSpriteReady) return;
   const { spriteX, spriteY, spriteWidth, spriteHeight } = batterLayout();
   // Draw the cleaned sprite directly so the natural 3D silhouette and diagonal bat remain intact.
   ctx.drawImage(lohitSpriteClean || lohitSprite, spriteX, spriteY, spriteWidth, spriteHeight);
@@ -335,67 +335,6 @@ function drawMaskedImage(image, x, y, width, height, points) {
   ctx.closePath();
   ctx.clip();
   ctx.drawImage(image, x, y, width, height);
-  ctx.restore();
-}
-
-function drawBatterFallback() {
-  const { feet, scale, batContact } = batterLayout();
-  const s = scale;
-  const waistY = feet.y - 47 * s;
-  const shoulderY = feet.y - 98 * s;
-  const headY = feet.y - 118 * s;
-
-  // Ground shadow makes the player feel planted on the turf.
-  ctx.save();
-  ctx.fillStyle = "rgba(0, 0, 0, .38)";
-  ctx.beginPath(); ctx.ellipse(feet.x, feet.y + 3, 34 * s, 5 * s, 0, 0, Math.PI * 2); ctx.fill();
-
-  // Blue trousers, orange side stripe, and pale pads.
-  polygon([
-    { x: feet.x - 23 * s, y: waistY }, { x: feet.x - 5 * s, y: waistY },
-    { x: feet.x - 11 * s, y: feet.y }, { x: feet.x - 29 * s, y: feet.y }
-  ], "#0b4e96", "#092e5b", 1);
-  polygon([
-    { x: feet.x + 2 * s, y: waistY }, { x: feet.x + 20 * s, y: waistY },
-    { x: feet.x + 29 * s, y: feet.y }, { x: feet.x + 10 * s, y: feet.y }
-  ], "#0b4e96", "#092e5b", 1);
-  drawLine({ x: feet.x - 8 * s, y: waistY + 4 * s }, { x: feet.x - 18 * s, y: feet.y - 3 * s }, "#ef7e28", 3 * s);
-  drawLine({ x: feet.x + 11 * s, y: waistY + 4 * s }, { x: feet.x + 20 * s, y: feet.y - 3 * s }, "#ef7e28", 3 * s);
-  ctx.fillStyle = "#d7d8cf";
-  ctx.fillRect(feet.x - 29 * s, feet.y - 9 * s, 19 * s, 9 * s);
-  ctx.fillRect(feet.x + 10 * s, feet.y - 9 * s, 20 * s, 9 * s);
-
-  // Fictional blue-and-orange team jersey, viewed from behind.
-  polygon([
-    { x: feet.x - 32 * s, y: shoulderY + 8 * s }, { x: feet.x + 29 * s, y: shoulderY + 8 * s },
-    { x: feet.x + 24 * s, y: waistY + 7 * s }, { x: feet.x - 26 * s, y: waistY + 7 * s }
-  ], "#0754a3", "#062d5e", 1.2);
-  polygon([
-    { x: feet.x - 27 * s, y: waistY - 12 * s }, { x: feet.x + 25 * s, y: waistY - 12 * s },
-    { x: feet.x + 24 * s, y: waistY + 7 * s }, { x: feet.x - 26 * s, y: waistY + 7 * s }
-  ], "#ee7928");
-  ctx.fillStyle = "#f7f4dc";
-  ctx.font = `800 ${Math.max(9, 11 * s)}px system-ui`;
-  ctx.textAlign = "center";
-  ctx.fillText("LOHIT", feet.x - 1 * s, shoulderY + 32 * s);
-
-  // Helmet and neck.
-  ctx.fillStyle = "#b46a3a";
-  ctx.fillRect(feet.x - 7 * s, shoulderY - 4 * s, 14 * s, 13 * s);
-  ctx.fillStyle = "#0a4c92";
-  ctx.beginPath(); ctx.arc(feet.x - 2 * s, headY + 7 * s, 20 * s, Math.PI, Math.PI * 2); ctx.fill();
-  ctx.fillRect(feet.x - 21 * s, headY + 6 * s, 38 * s, 13 * s);
-  drawLine({ x: feet.x + 16 * s, y: headY + 14 * s }, { x: feet.x + 28 * s, y: headY + 15 * s }, "#8fa2ad", 1.3 * s);
-
-  // Right arm, glove, and raised bat.
-  drawLine({ x: feet.x + 22 * s, y: shoulderY + 18 * s }, { x: feet.x + 39 * s, y: waistY - 12 * s }, "#0754a3", 11 * s);
-  ctx.fillStyle = "#d9ded9";
-  ctx.beginPath(); ctx.arc(feet.x + 40 * s, waistY - 13 * s, 7 * s, 0, Math.PI * 2); ctx.fill();
-  drawLine({ x: feet.x + 41 * s, y: waistY - 15 * s }, { x: batContact.x - 6 * s, y: batContact.y + 6 * s }, "#5d3415", 3 * s);
-  polygon([
-    { x: batContact.x - 7 * s, y: batContact.y + 9 * s }, { x: batContact.x + 8 * s, y: batContact.y + 13 * s },
-    { x: batContact.x + 39 * s, y: batContact.y - 51 * s }, { x: batContact.x + 22 * s, y: batContact.y - 56 * s }
-  ], "#d6ab72", "#875b2b", 1.2);
   ctx.restore();
 }
 
