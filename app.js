@@ -156,10 +156,10 @@ function drawCourt() {
   drawTurfStripes();
 
   // Camera is behind a right-handed batter: screen left is leg side; screen right is off side.
-  const leftMiddleNear = project(-court.halfWidth, 4, court.nearZ);
-  const leftMiddleFar = project(-court.halfWidth, 4, court.farZ);
-  const rightMiddleNear = project(court.halfWidth, 4, court.nearZ);
-  const rightMiddleFar = project(court.halfWidth, 4, court.farZ);
+  const leftMiddleNear = project(-court.halfWidth, frontWallScoreDivider, court.nearZ);
+  const leftMiddleFar = project(-court.halfWidth, frontWallScoreDivider, court.farZ);
+  const rightMiddleNear = project(court.halfWidth, frontWallScoreDivider, court.nearZ);
+  const rightMiddleFar = project(court.halfWidth, frontWallScoreDivider, court.farZ);
   polygon([nearLeft, farLeft, leftMiddleFar, leftMiddleNear], "#17120e", "#ff7b24", 1.2);
   polygon([leftMiddleNear, leftMiddleFar, frontTopLeft, leftTopNear], "#110e0c", "#b94b14", 1.2);
   polygon([nearRight, rightMiddleNear, rightMiddleFar, farRight], "#101419", "#1383ff", 1.2);
@@ -212,10 +212,10 @@ function drawCourt() {
   // Keep the side-wall scores inside the widened arena, between the near-wall and deep fielders.
   const sideWallLabelX = court.halfWidth - 2.5;
   const sideWallLabelZ = 10.2;
-  drawWallLabel("2", -sideWallLabelX, 5.4, sideWallLabelZ, "#ffad65", 25);
-  drawWallLabel("1", -sideWallLabelX, 1.7, sideWallLabelZ, "#ffad65", 25);
-  drawWallLabel("2", sideWallLabelX, 5.4, sideWallLabelZ, "#62a6ff", 25);
-  drawWallLabel("1", sideWallLabelX, 1.7, sideWallLabelZ, "#62a6ff", 25);
+  drawWallLabel("2", -sideWallLabelX, 7.8, sideWallLabelZ, "#ffad65", 25);
+  drawWallLabel("1", -sideWallLabelX, 3.0, sideWallLabelZ, "#ffad65", 25);
+  drawWallLabel("2", sideWallLabelX, 7.8, sideWallLabelZ, "#62a6ff", 25);
+  drawWallLabel("1", sideWallLabelX, 3.0, sideWallLabelZ, "#62a6ff", 25);
 
 }
 
@@ -574,7 +574,7 @@ function update(dt) {
   if (ball.x - ball.radius <= -court.halfWidth || ball.x + ball.radius >= court.halfWidth) {
     const hitLeft = ball.x < 0;
     ball.x = hitLeft ? -court.halfWidth + ball.radius : court.halfWidth - ball.radius;
-    if (!scoredThisBall) scoreRuns(ball.y >= 4 ? 2 : 1);
+    if (!scoredThisBall) scoreRuns(ball.y >= frontWallScoreDivider ? 2 : 1);
     ball.vx *= -0.68;
   }
   if (ball.z + ball.radius >= court.farZ) {
