@@ -207,10 +207,13 @@ function drawCourt() {
 
   drawWallLabel("6", 0, 6.0, court.farZ, "#f2c947", 32);
   drawWallLabel("4", 0, 2.1, court.farZ, "#f2c947", 32);
-  drawWallLabel("2", -court.halfWidth, 6.0, 5.3, "#ffad65", 25);
-  drawWallLabel("1", -court.halfWidth, 2.1, 5.3, "#ffad65", 25);
-  drawWallLabel("2", court.halfWidth, 6.0, 5.3, "#62a6ff", 25);
-  drawWallLabel("1", court.halfWidth, 2.1, 5.3, "#62a6ff", 25);
+  // Keep the side-wall scores inside the widened arena, between the near-wall and deep fielders.
+  const sideWallLabelX = court.halfWidth - 2.5;
+  const sideWallLabelZ = 10.2;
+  drawWallLabel("2", -sideWallLabelX, 5.4, sideWallLabelZ, "#ffad65", 25);
+  drawWallLabel("1", -sideWallLabelX, 1.7, sideWallLabelZ, "#ffad65", 25);
+  drawWallLabel("2", sideWallLabelX, 5.4, sideWallLabelZ, "#62a6ff", 25);
+  drawWallLabel("1", sideWallLabelX, 1.7, sideWallLabelZ, "#62a6ff", 25);
 
 }
 
