@@ -32,10 +32,10 @@ bowlerSprite.onload = () => {
 };
 bowlerSprite.src = "underarm-bowler-yellow-v2.png";
 
-// The arena is deliberately 75% broader than the first playable court.  The pitch and
-// player coordinates remain unchanged, so this opens the box around the action rather
-// than making Lohit, the stumps, or the bowling end look zoomed out.
-const court = { halfWidth: 15.75, nearZ: -12, farZ: 16, ceiling: 8 };
+// This is the approved wide-box footprint: a further 25% wider than the first arena
+// expansion, with the front wall set deeper into the court. The pitch and player
+// coordinates remain unchanged, so the extra area belongs to the box and fielders.
+const court = { halfWidth: 19.7, nearZ: -12, farZ: 22, ceiling: 8 };
 // Compact underarm box-cricket pitch: the bowling end is deliberately much closer than the first prototype.
 const battingStumpsZ = -7.5;
 const bowlingStumpsZ = 3.0;
@@ -375,9 +375,9 @@ function drawArenaRoof() {
 function drawCeilingLights() {
   const { width, height } = size();
   // Recessed roof lights begin larger over the wicketkeeper and converge towards the front wall.
-  for (let row = 0; row < 9; row += 1) {
-    const depth = row / 8;
-    const y = height * (0.07 + depth * 0.265);
+  for (let row = 0; row < 11; row += 1) {
+    const depth = row / 10;
+    const y = height * (0.06 + depth * 0.28);
   // Broaden the near rows to follow the expanded side-wall and roof footprint.
   const spread = width * (0.46 * Math.pow(1 - depth, 1.32) + 0.016);
     [-1, -0.48, 0, 0.48, 1].forEach((column) => {
