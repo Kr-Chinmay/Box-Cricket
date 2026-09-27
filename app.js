@@ -32,7 +32,10 @@ bowlerSprite.onload = () => {
 };
 bowlerSprite.src = "underarm-bowler-yellow-v2.png";
 
-const court = { halfWidth: 9, nearZ: -12, farZ: 16, ceiling: 8 };
+// The arena is deliberately 75% broader than the first playable court.  The pitch and
+// player coordinates remain unchanged, so this opens the box around the action rather
+// than making Lohit, the stumps, or the bowling end look zoomed out.
+const court = { halfWidth: 15.75, nearZ: -12, farZ: 16, ceiling: 8 };
 // Compact underarm box-cricket pitch: the bowling end is deliberately much closer than the first prototype.
 const battingStumpsZ = -7.5;
 const bowlingStumpsZ = 3.0;
@@ -375,7 +378,8 @@ function drawCeilingLights() {
   for (let row = 0; row < 9; row += 1) {
     const depth = row / 8;
     const y = height * (0.07 + depth * 0.265);
-    const spread = width * (0.43 * Math.pow(1 - depth, 1.32) + 0.016);
+  // Broaden the near rows to follow the expanded side-wall and roof footprint.
+  const spread = width * (0.46 * Math.pow(1 - depth, 1.32) + 0.016);
     [-1, -0.48, 0, 0.48, 1].forEach((column) => {
       drawCeilingLight(width / 2 + column * spread, y, depth);
     });
@@ -401,7 +405,7 @@ function drawRoofChannels() {
   const vanishingPoint = { x: width / 2, y: height * 0.35 };
   [-0.94, -0.47, 0, 0.47, 0.94].forEach((position) => {
     ctx.beginPath();
-    ctx.moveTo(width / 2 + position * width * 0.47, 0);
+    ctx.moveTo(width / 2 + position * width * 0.5, 0);
     ctx.lineTo(vanishingPoint.x + position * 7, vanishingPoint.y);
     ctx.strokeStyle = "rgba(70, 75, 76, .32)";
     ctx.lineWidth = position === 0 ? 1.3 : 0.8;
