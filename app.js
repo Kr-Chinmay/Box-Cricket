@@ -39,7 +39,9 @@ const bowlingStumpsZ = 3.0;
 const bowlingPoppingCreaseZ = bowlingStumpsZ - 1.25;
 // Ball is reduced again for the compact underarm court, both visually and physically.
 const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.0672 };
-let shotAngle = 0;
+// Open with the shot guide 30° toward leg side (screen-left), clear of the bowler and front-wall labels.
+const defaultShotAngle = -30 * Math.PI / 180;
+let shotAngle = defaultShotAngle;
 let swipeStart = null;
 let loftSelected = false;
 let timingPosition = 0.5;
