@@ -54,7 +54,9 @@ inwardFielderSprite.src = "fielder-yellow-facing-batter-v1.png";
 // This is the approved wide-box footprint: a further 25% wider than the first arena
 // expansion, with the front wall set deeper into the court. The pitch and player
 // coordinates remain unchanged, so the extra area belongs to the box and fielders.
-const court = { halfWidth: 19.7, nearZ: -12, farZ: 22, ceiling: 8 };
+const court = { halfWidth: 19.7, nearZ: -12, farZ: 22, ceiling: 12 };
+// The taller front wall remains evenly split: 4 in the lower half and 6 in the upper half.
+const frontWallScoreDivider = court.ceiling / 2;
 // Compact underarm box-cricket pitch: the bowling end is deliberately much closer than the first prototype.
 const battingStumpsZ = -7.5;
 const bowlingStumpsZ = 3.0;
@@ -135,8 +137,8 @@ function drawCourt() {
   const farRight = project(court.halfWidth, 0, court.farZ);
   const frontTopLeft = project(-court.halfWidth, court.ceiling, court.farZ);
   const frontTopRight = project(court.halfWidth, court.ceiling, court.farZ);
-  const frontMiddleLeft = project(-court.halfWidth, 4, court.farZ);
-  const frontMiddleRight = project(court.halfWidth, 4, court.farZ);
+  const frontMiddleLeft = project(-court.halfWidth, frontWallScoreDivider, court.farZ);
+  const frontMiddleRight = project(court.halfWidth, frontWallScoreDivider, court.farZ);
   const leftTopNear = project(-court.halfWidth, court.ceiling, court.nearZ);
   const rightTopNear = project(court.halfWidth, court.ceiling, court.nearZ);
 
@@ -205,8 +207,8 @@ function drawCourt() {
   // The batting wicket is closest to the camera, so it is drawn after the batter.
   drawWicket(battingStumpsZ, 2.0);
 
-  drawWallLabel("6", 0, 6.0, court.farZ, "#f2c947", 32);
-  drawWallLabel("4", 0, 2.1, court.farZ, "#f2c947", 32);
+  drawWallLabel("6", 0, court.ceiling * 0.75, court.farZ, "#f2c947", 32);
+  drawWallLabel("4", 0, court.ceiling * 0.25, court.farZ, "#f2c947", 32);
   // Keep the side-wall scores inside the widened arena, between the near-wall and deep fielders.
   const sideWallLabelX = court.halfWidth - 2.5;
   const sideWallLabelZ = 10.2;
@@ -577,7 +579,7 @@ function update(dt) {
   }
   if (ball.z + ball.radius >= court.farZ) {
     ball.z = court.farZ - ball.radius;
-    if (!scoredThisBall) scoreRuns(ball.y >= 4 ? 6 : 4);
+    if (!scoredThisBall) scoreRuns(ball.y >= frontWallScoreDivider ? 6 : 4);
     ball.vz *= -0.68;
   }
   if (ball.z - ball.radius <= court.nearZ) {
