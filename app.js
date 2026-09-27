@@ -32,6 +32,16 @@ bowlerSprite.onload = () => {
 };
 bowlerSprite.src = "underarm-bowler-yellow-v2.png";
 
+const fielderSprite = new Image();
+let fielderSpriteReady = false;
+let fielderSpriteClean = null;
+fielderSprite.onload = () => {
+  // The fielder asset uses a solid magenta key so it can sit naturally inside the arena.
+  fielderSpriteClean = removeChromaMagenta(fielderSprite);
+  fielderSpriteReady = true;
+};
+fielderSprite.src = "fielder-yellow-ready-v1.png";
+
 // This is the approved wide-box footprint: a further 25% wider than the first arena
 // expansion, with the front wall set deeper into the court. The pitch and player
 // coordinates remain unchanged, so the extra area belongs to the box and fielders.
@@ -177,6 +187,7 @@ function drawCourt() {
   // The stationary underarm bowler is placed at the far bowling crease. There is deliberately no run-up.
   drawBowler();
   drawWicket(bowlingStumpsZ, 1.45);
+  drawFielders();
   // Keep the arena clean while Lohit's 3D sprite loads—never show the old 2D fallback.
   if (lohitSpriteReady) {
     drawShotGuide();
@@ -251,6 +262,37 @@ function drawBowler() {
   // The generated image has a small bottom margin; this anchors its actual shoes on the turf.
   const spriteY = feet.y - spriteHeight * 0.92;
   ctx.drawImage(bowlerSpriteClean || bowlerSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+}
+
+function drawFielders() {
+  if (!fielderSpriteReady) return;
+  // Two deep fielders protect the front wall. The other two guard the side walls closer to Lohit.
+  // Their mirrored poses make each pair face naturally toward the centre of the court.
+  const positions = [
+    { x: -11.2, z: 17.8, height: 118, mirror: false },
+    { x: 11.2, z: 17.8, height: 118, mirror: true },
+    { x: -12.4, z: -0.2, height: 80, mirror: false },
+    { x: 12.4, z: -0.2, height: 80, mirror: true }
+  ];
+
+  positions.forEach((fielder) => {
+    const feet = project(fielder.x, 0, fielder.z);
+    const scale = Math.max(0.42, Math.min(1.18, feet.scale));
+    const spriteHeight = fielder.height * scale;
+    const spriteWidth = spriteHeight * (2 / 3);
+    const spriteX = feet.x - spriteWidth / 2;
+    const spriteY = feet.y - spriteHeight * 0.91;
+
+    ctx.save();
+    if (fielder.mirror) {
+      ctx.translate(spriteX + spriteWidth, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(fielderSpriteClean || fielderSprite, 0, spriteY, spriteWidth, spriteHeight);
+    } else {
+      ctx.drawImage(fielderSpriteClean || fielderSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+    }
+    ctx.restore();
+  });
 }
 
 function removeChromaMagenta(image) {
