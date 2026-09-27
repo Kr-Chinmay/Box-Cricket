@@ -42,6 +42,15 @@ fielderSprite.onload = () => {
 };
 fielderSprite.src = "fielder-yellow-ready-v1.png";
 
+const inwardFielderSprite = new Image();
+let inwardFielderSpriteReady = false;
+let inwardFielderSpriteClean = null;
+inwardFielderSprite.onload = () => {
+  inwardFielderSpriteClean = removeChromaMagenta(inwardFielderSprite);
+  inwardFielderSpriteReady = true;
+};
+inwardFielderSprite.src = "fielder-yellow-inward-v1.png";
+
 // This is the approved wide-box footprint: a further 25% wider than the first arena
 // expansion, with the front wall set deeper into the court. The pitch and player
 // coordinates remain unchanged, so the extra area belongs to the box and fielders.
@@ -265,17 +274,19 @@ function drawBowler() {
 }
 
 function drawFielders() {
-  if (!fielderSpriteReady) return;
-  // Two deep fielders protect the front wall. The other two guard the side walls closer to Lohit.
-  // Their mirrored poses make each pair face naturally toward the centre of the court.
-  const positions = [
-    { x: -11.2, z: 17.8, height: 118, mirror: false },
-    { x: 11.2, z: 17.8, height: 118, mirror: true },
-    { x: -12.4, z: -0.2, height: 80, mirror: false },
-    { x: 12.4, z: -0.2, height: 80, mirror: true }
-  ];
+  // Two deep fielders protect the front wall. The other two use a separate, inward-facing
+  // pose so their eyes and shoulders are directed at Lohit rather than down the screen.
+  if (fielderSpriteReady) {
+    drawFielder({ x: -11.2, z: 17.8, height: 118, mirror: false }, fielderSpriteClean || fielderSprite);
+    drawFielder({ x: 11.2, z: 17.8, height: 118, mirror: true }, fielderSpriteClean || fielderSprite);
+  }
+  if (inwardFielderSpriteReady) {
+    drawFielder({ x: -12.4, z: -0.2, height: 80, mirror: false }, inwardFielderSpriteClean || inwardFielderSprite);
+    drawFielder({ x: 12.4, z: -0.2, height: 80, mirror: true }, inwardFielderSpriteClean || inwardFielderSprite);
+  }
+}
 
-  positions.forEach((fielder) => {
+function drawFielder(fielder, image) {
     const feet = project(fielder.x, 0, fielder.z);
     const scale = Math.max(0.42, Math.min(1.18, feet.scale));
     const spriteHeight = fielder.height * scale;
@@ -287,12 +298,11 @@ function drawFielders() {
     if (fielder.mirror) {
       ctx.translate(spriteX + spriteWidth, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(fielderSpriteClean || fielderSprite, 0, spriteY, spriteWidth, spriteHeight);
+      ctx.drawImage(image, 0, spriteY, spriteWidth, spriteHeight);
     } else {
-      ctx.drawImage(fielderSpriteClean || fielderSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+      ctx.drawImage(image, spriteX, spriteY, spriteWidth, spriteHeight);
     }
     ctx.restore();
-  });
 }
 
 function removeChromaMagenta(image) {
