@@ -49,7 +49,7 @@ inwardFielderSprite.onload = () => {
   inwardFielderSpriteClean = removeChromaMagenta(inwardFielderSprite);
   inwardFielderSpriteReady = true;
 };
-inwardFielderSprite.src = "fielder-yellow-inward-v1.png";
+inwardFielderSprite.src = "fielder-yellow-facing-batter-v1.png";
 
 // This is the approved wide-box footprint: a further 25% wider than the first arena
 // expansion, with the front wall set deeper into the court. The pitch and player
@@ -274,8 +274,8 @@ function drawBowler() {
 }
 
 function drawFielders() {
-  // Two deep fielders protect the front wall. The other two use a separate, inward-facing
-  // pose so their eyes and shoulders are directed at Lohit rather than down the screen.
+  // Two deep fielders protect the front wall. The side-wall pair use a separate front
+  // three-quarter pose, so their chest, feet, and eyes all face Lohit.
   if (fielderSpriteReady) {
     drawFielder({ x: -11.2, z: 17.8, height: 118, mirror: false }, fielderSpriteClean || fielderSprite);
     drawFielder({ x: 11.2, z: 17.8, height: 118, mirror: true }, fielderSpriteClean || fielderSprite);
