@@ -277,9 +277,11 @@ function drawShotGuide() {
   const endX = layout.batContact.x + Math.sin(shotAngle) * guideLength;
   const endY = layout.batContact.y - Math.cos(shotAngle) * guideLength;
   ctx.save();
-  ctx.strokeStyle = "rgba(242, 201, 71, 0.9)";
-  ctx.lineWidth = 2;
-  ctx.setLineDash([5, 6]);
+  // Black round dots make the aim guide distinct from the yellow bowler and fielders.
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.92)";
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.setLineDash([1, 8]);
   ctx.beginPath(); ctx.moveTo(layout.batContact.x, layout.batContact.y); ctx.lineTo(endX, endY); ctx.stroke();
   ctx.restore();
 }
