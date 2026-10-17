@@ -85,7 +85,7 @@ const bowlingStumpsZ = 3.0;
 const bowlingPoppingCreaseZ = bowlingStumpsZ - 1.25;
 // Ball is reduced again for the compact underarm court, both visually and physically.
 const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.0672 };
-const delivery = { phase: "held", nextAt: 0, windupAt: 0, releasedAt: 0 };
+const delivery = { phase: "held", nextAt: 0, windupAt: 0, releasedAt: 0, bounced: false };
 const deliveryDelayMs = 2200;
 const deliveryWindupMs = 750;
 // Open with the shot guide 30° toward leg side (screen-left), clear of the bowler and front-wall labels.
@@ -634,9 +634,10 @@ function releaseDelivery(now) {
   placeBallInBowlerHand(1);
   // A deliberately gentle first-version underarm ball: one clear bounce and enough time
   // for a phone player to see it, judge it, and complete a swipe.
-  ball.vx = -0.7;
+  ball.vx = -0.84;
   ball.vy = 0.9;
-  ball.vz = -4.8;
+  ball.vz = -5.76;
+  delivery.bounced = false;
   delivery.phase = "incoming";
   delivery.releasedAt = now;
   timingRunning = true;
@@ -648,7 +649,7 @@ function releaseDelivery(now) {
 
 function isBallPlayable() {
   return delivery.phase === "incoming"
-    && ball.z <= battingStumpsZ + 3.4
+    && ball.z <= battingStumpsZ + 4.2
     // Once it reaches the wicket line, a late batter has missed the ball.
     && ball.z >= battingStumpsZ + 0.18;
 }
@@ -682,16 +683,19 @@ function updateDelivery(dt) {
     return;
   }
 
-  ball.vy -= 9.8 * dt;
+  // Before its one bounce the ball drops naturally. After that bounce it skids low
+  // toward Lohit, preventing the unrealistic second and third bounces.
+  if (!delivery.bounced) ball.vy -= 9.8 * dt;
   ball.x += ball.vx * dt;
-  ball.y += ball.vy * dt;
+  if (!delivery.bounced) ball.y += ball.vy * dt;
   ball.z += ball.vz * dt;
 
-  if (ball.y - ball.radius <= 0) {
+  if (!delivery.bounced && ball.y - ball.radius <= 0) {
     ball.y = ball.radius;
-    ball.vy = Math.abs(ball.vy) * 0.61;
-    ball.vx *= 0.92;
-    ball.vz *= 0.91;
+    ball.vy = 0;
+    ball.vx *= 0.96;
+    ball.vz *= 0.96;
+    delivery.bounced = true;
   }
 
   // A late straight ball now resolves naturally at the batting wicket. A ball outside the
@@ -802,6 +806,7 @@ function updateTimingGauge(now) {
 function resetBall(message) {
   delivery.phase = "held";
   delivery.nextAt = performance.now() + deliveryDelayMs;
+  delivery.bounced = false;
   placeBallInBowlerHand();
   inPlay = false;
   timingRunning = false;
