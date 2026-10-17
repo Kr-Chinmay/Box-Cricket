@@ -230,7 +230,7 @@ function drawCourt() {
     drawBatter();
   }
   // The batting wicket is closest to the camera, so it is drawn after the batter.
-  drawWicket(battingStumpsZ, 2.0);
+  drawWicket(battingStumpsZ, 2.0, true);
 
   drawWallLabel("6", 0, court.ceiling * 0.75, court.farZ, "#f2c947", 32);
   drawWallLabel("4", 0, court.ceiling * 0.25, court.farZ, "#f2c947", 32);
@@ -522,9 +522,21 @@ function drawLine(a, b, color, lineWidth) {
   ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.strokeStyle = color; ctx.lineWidth = lineWidth; ctx.stroke();
 }
 
-function drawWicket(z, heightWorld) {
+function interpolatePoint(from, to, amount) {
+  return {
+    x: from.x + (to.x - from.x) * amount,
+    y: from.y + (to.y - from.y) * amount
+  };
+}
+
+function drawWicket(z, heightWorld, canBreak = false) {
   const baseCentre = project(0, 0.015, z);
   const shadowWidth = Math.max(5, 17 * baseCentre.scale);
+  const isBroken = canBreak && delivery.phase === "wicketHit";
+  // The wicket falls quickly at impact, then remains dismantled long enough to read clearly.
+  const breakProgress = isBroken
+    ? Math.min(1, Math.max(0, (performance.now() - delivery.resultAt) / 260))
+    : 0;
   ctx.save();
   ctx.fillStyle = "rgba(0, 0, 0, .42)";
   ctx.beginPath();
@@ -533,9 +545,17 @@ function drawWicket(z, heightWorld) {
   ctx.restore();
 
   const tops = [];
-  [-0.28, 0, 0.28].forEach((offset) => {
+  const fallenTopTargets = [
+    project(-0.92, 0.14, z - 0.28),
+    project(0.14, 0.1, z - 0.86),
+    project(0.86, 0.14, z - 0.32)
+  ];
+  [-0.28, 0, 0.28].forEach((offset, index) => {
     const base = project(offset, 0, z);
-    const top = project(offset, heightWorld, z);
+    const uprightTop = project(offset, heightWorld, z);
+    const top = isBroken
+      ? interpolatePoint(uprightTop, fallenTopTargets[index], breakProgress)
+      : uprightTop;
     tops.push(top);
     const width = Math.max(2, 3.7 * base.scale);
     ctx.save();
@@ -548,8 +568,19 @@ function drawWicket(z, heightWorld) {
     drawLine({ x: base.x + width * 0.2, y: base.y }, { x: top.x + width * 0.2, y: top.y }, "#7a3c10", Math.max(1, width * 0.22));
     ctx.restore();
   });
-  drawBail(tops[0], tops[1]);
-  drawBail(tops[1], tops[2]);
+  if (!isBroken) {
+    drawBail(tops[0], tops[1]);
+    drawBail(tops[1], tops[2]);
+    return;
+  }
+
+  // The bails leave the wicket separately, rather than staying attached to the falling stumps.
+  const firstBailStart = interpolatePoint(project(-0.24, heightWorld, z), project(-1.15, 0.46, z - 0.46), breakProgress);
+  const firstBailEnd = interpolatePoint(project(-0.04, heightWorld, z), project(-0.58, 0.72, z - 0.92), breakProgress);
+  const secondBailStart = interpolatePoint(project(0.04, heightWorld, z), project(0.54, 0.76, z - 0.78), breakProgress);
+  const secondBailEnd = interpolatePoint(project(0.24, heightWorld, z), project(1.18, 0.42, z - 0.36), breakProgress);
+  drawBail(firstBailStart, firstBailEnd);
+  drawBail(secondBailStart, secondBailEnd);
 }
 
 function drawBail(left, right) {
@@ -588,7 +619,7 @@ function drawBall() {
 }
 
 function update(dt) {
-  if (delivery.phase === "held" || delivery.phase === "windup" || delivery.phase === "incoming" || delivery.phase === "dead") {
+  if (delivery.phase === "held" || delivery.phase === "windup" || delivery.phase === "incoming" || delivery.phase === "wicketHit" || delivery.phase === "dead") {
     updateDelivery(dt);
     return;
   }
@@ -676,7 +707,7 @@ function updateDelivery(dt) {
 
   if (delivery.phase === "wicketHit") {
     // Keep the ball visibly resting against the wicket for a moment before the reset.
-    if (now >= delivery.resultAt + 560) {
+    if (now >= delivery.resultAt + 760) {
       delivery.phase = "dead";
       resetTime = now + 720;
     }
@@ -709,7 +740,7 @@ function updateDelivery(dt) {
     timingRunning = false;
     wickets += 1;
     scoreElement.textContent = `${score} / ${wickets}`;
-    statusElement.textContent = "Bowled! The ball reached Lohit's stumps.";
+    statusElement.textContent = "Bowled! Lohit's stumps are dismantled.";
     return;
   }
 
