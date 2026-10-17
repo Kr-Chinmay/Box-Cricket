@@ -16,6 +16,18 @@ lohitStanceSprite.onload = () => {
 };
 lohitStanceSprite.src = "lohit-batter-stance-v3.png";
 
+// Frame 1 is always the approved standing pose above. The other three sprites form one
+// deliberately slow, grounded straight drive: small backlift → contact → high finish.
+const lohitDriveMotionSprites = [
+  "lohit-drive-load-v3.png",
+  "lohit-drive-contact-v3.png",
+  "lohit-drive-followthrough-v3.png"
+].map((src) => {
+  const image = new Image();
+  image.src = src;
+  return image;
+});
+
 const bowlerSprite = new Image();
 let bowlerSpriteReady = false;
 let bowlerSpriteClean = null;
@@ -95,6 +107,7 @@ let inPlay = false;
 let scoredThisBall = false;
 let resetTime = 0;
 let lastFrame = performance.now();
+const driveAnimation = { active: false, startedAt: 0, duration: 820 };
 
 function resizeCanvas() {
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -274,7 +287,27 @@ function drawShotGuide() {
 function drawBatter() {
   if (!lohitStanceReady) return;
   const { spriteX, spriteY, spriteWidth, spriteHeight } = batterLayout();
-  ctx.drawImage(lohitStanceSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+  const sprite = getDriveSprite();
+  ctx.drawImage(sprite, spriteX, spriteY, spriteWidth, spriteHeight);
+}
+
+function getDriveSprite(now = performance.now()) {
+  if (!driveAnimation.active) return lohitStanceSprite;
+  const elapsed = now - driveAnimation.startedAt;
+  let frame = 0;
+  if (elapsed < 190) frame = 0; // the approved stance is held while Lohit judges the ball
+  else if (elapsed < 400) frame = 1; // compact loading/backlift
+  else if (elapsed < 590) frame = 2; // full bat face passes through the contact point
+  else if (elapsed < driveAnimation.duration) frame = 3; // balanced forward/upward finish
+  else {
+    driveAnimation.active = false;
+    return lohitStanceSprite;
+  }
+
+  if (frame === 0) return lohitStanceSprite;
+  const motionSprite = lohitDriveMotionSprites[frame - 1];
+  // Never replace the signed-off stance with an unloaded frame on a slow phone connection.
+  return motionSprite.complete && motionSprite.naturalWidth ? motionSprite : lohitStanceSprite;
 }
 
 function drawBowler() {
@@ -718,8 +751,11 @@ function launchBall(angle) {
   const timing = getTimingResult(timingPosition);
   // Freeze the marker where the player pressed Launch so the result remains visible.
   timingRunning = false;
-  // The player remains in the approved ready stance for this interim build. The next
-  // change will add swing frames only after this base pose is visually signed off.
+  // Use the approved stance as frame one, then play one intentional slow straight drive.
+  // Direction still controls the ball, while directional body shots are added later.
+  driveAnimation.active = true;
+  driveAnimation.startedAt = performance.now();
+  driveAnimation.duration = 820;
   // Pull the delivery into Lohit's contact area before sending it away from the bat.
   ball.x = Math.max(-0.42, Math.min(0.42, ball.x));
   ball.y = Math.max(0.82, ball.y + 0.2);
@@ -758,6 +794,7 @@ function resetBall(message) {
   delivery.bounced = false;
   placeBallInBowlerHand();
   inPlay = false;
+  driveAnimation.active = false;
   timingRunning = false;
   timingPosition = 0.5;
   timingMarker.style.left = "50%";
