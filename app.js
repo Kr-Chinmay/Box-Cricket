@@ -107,7 +107,9 @@ let inPlay = false;
 let scoredThisBall = false;
 let resetTime = 0;
 let lastFrame = performance.now();
-const driveAnimation = { active: false, startedAt: 0, duration: 820 };
+// The backlift begins with the player's finger movement; impact begins on release.
+// Keeping those two moments separate prevents the visual swing from trailing the ball.
+const driveAnimation = { phase: "idle", startedAt: 0 };
 
 function resizeCanvas() {
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -294,22 +296,24 @@ function drawBatter() {
 }
 
 function getDriveSprite(now = performance.now()) {
-  if (!driveAnimation.active) return lohitStanceSprite;
+  if (driveAnimation.phase === "idle") return lohitStanceSprite;
+  if (driveAnimation.phase === "backlift") return getMotionSprite(0);
+
   const elapsed = now - driveAnimation.startedAt;
-  let frame = 0;
-  if (elapsed < 190) frame = 0; // the approved stance is held while Lohit judges the ball
-  else if (elapsed < 400) frame = 1; // compact loading/backlift
-  else if (elapsed < 590) frame = 2; // full bat face passes through the contact point
-  else if (elapsed < driveAnimation.duration) frame = 3; // balanced forward/upward finish
-  else {
-    driveAnimation.active = false;
+  if (elapsed < 145) return getMotionSprite(1); // impact happens as the ball launches
+  if (elapsed < 455) return getMotionSprite(2); // controlled follow-through after impact
+
+  driveAnimation.phase = "idle";
+  return lohitStanceSprite;
+}
+
+function getMotionSprite(index) {
+  const motionSprite = lohitDriveMotionSprites[index];
+  // Never replace the signed-off stance with an unloaded frame on a slow phone connection.
+  if (!motionSprite.complete || !motionSprite.naturalWidth) {
     return lohitStanceSprite;
   }
-
-  if (frame === 0) return lohitStanceSprite;
-  const motionSprite = lohitDriveMotionSprites[frame - 1];
-  // Never replace the signed-off stance with an unloaded frame on a slow phone connection.
-  return motionSprite.complete && motionSprite.naturalWidth ? motionSprite : lohitStanceSprite;
+  return motionSprite;
 }
 
 function drawBowler() {
@@ -753,11 +757,10 @@ function launchBall(angle) {
   const timing = getTimingResult(timingPosition);
   // Freeze the marker where the player pressed Launch so the result remains visible.
   timingRunning = false;
-  // Use the approved stance as frame one, then play one intentional slow straight drive.
-  // Direction still controls the ball, while directional body shots are added later.
-  driveAnimation.active = true;
+  // The player has already lifted the bat during the swipe. At release, show impact
+  // immediately—on the same frame that the ball leaves Lohit's contact area.
+  driveAnimation.phase = "contact";
   driveAnimation.startedAt = performance.now();
-  driveAnimation.duration = 820;
   // Pull the delivery into Lohit's contact area before sending it away from the bat.
   ball.x = Math.max(-0.42, Math.min(0.42, ball.x));
   ball.y = Math.max(0.82, ball.y + 0.2);
@@ -796,7 +799,7 @@ function resetBall(message) {
   delivery.bounced = false;
   placeBallInBowlerHand();
   inPlay = false;
-  driveAnimation.active = false;
+  driveAnimation.phase = "idle";
   timingRunning = false;
   timingPosition = 0.5;
   timingMarker.style.left = "50%";
@@ -822,6 +825,9 @@ function startSwipe(event) {
   }
   const rect = canvas.getBoundingClientRect();
   swipeStart = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  // A compact raised-bat pose starts as the player begins the forward gesture.
+  driveAnimation.phase = "backlift";
+  driveAnimation.startedAt = performance.now();
   canvas.setPointerCapture?.(event.pointerId);
 }
 
@@ -836,12 +842,18 @@ function previewSwipe(event) {
 }
 
 function finishSwipe(event) {
-  if (!swipeStart || !isBallPlayable()) return;
+  if (!swipeStart) return;
+  if (!isBallPlayable()) {
+    swipeStart = null;
+    driveAnimation.phase = "idle";
+    return;
+  }
   const rect = canvas.getBoundingClientRect();
   const dx = event.clientX - rect.left - swipeStart.x;
   const forward = swipeStart.y - (event.clientY - rect.top);
   swipeStart = null;
   if (forward < 34) {
+    driveAnimation.phase = "idle";
     statusElement.textContent = "Swipe forward to play a shot.";
     return;
   }
@@ -880,6 +892,7 @@ canvas.addEventListener("pointermove", previewSwipe);
 canvas.addEventListener("pointerup", finishSwipe);
 canvas.addEventListener("pointercancel", () => {
   swipeStart = null;
+  driveAnimation.phase = "idle";
   if (isBallPlayable()) statusElement.textContent = "Swipe forward in the court to play a shot.";
 });
 loftButton.addEventListener("click", toggleLoft);
