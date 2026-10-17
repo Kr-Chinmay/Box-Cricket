@@ -14,14 +14,25 @@ lohitSprite.onload = () => {
   // Remove only the edge-connected neutral checkerboard so Lohit's white pads stay intact.
   lohitSpriteClean = removeBakedCheckerboard(lohitSprite);
   lohitSpriteReady = true;
-  // Reveal the arena only once there is a real 3D batter to draw—never the retired 2D fallback.
-  canvas.classList.remove("is-loading");
 };
 lohitSprite.onerror = () => {
-  // Avoid trapping the player on a blank page if a future deployment misses the image asset.
-  canvas.classList.remove("is-loading");
+  // The bat-free sprite below is now the primary game asset, so this legacy bat-included
+  // source is only retained as a fallback.
 };
 lohitSprite.src = "lohit-batter-backlift-v1.png";
+
+// Lohit's body is separate from his bat so the bat can follow the player's chosen swipe.
+const lohitBaseSprite = new Image();
+let lohitBaseSpriteReady = false;
+lohitBaseSprite.onload = () => {
+  lohitBaseSpriteReady = true;
+  canvas.classList.remove("is-loading");
+};
+lohitBaseSprite.onerror = () => {
+  // The existing complete sprite keeps the court playable if a future upload misses this asset.
+  canvas.classList.remove("is-loading");
+};
+lohitBaseSprite.src = "lohit-batter-base-v1.png";
 
 const bowlerSprite = new Image();
 let bowlerSpriteReady = false;
@@ -102,6 +113,7 @@ let inPlay = false;
 let scoredThisBall = false;
 let resetTime = 0;
 let lastFrame = performance.now();
+const batSwing = { active: false, startedAt: 0, angle: defaultShotAngle, lofted: false, duration: 0 };
 
 function resizeCanvas() {
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -225,7 +237,7 @@ function drawCourt() {
   drawWicket(bowlingStumpsZ, 1.45);
   drawFielders();
   // Keep the arena clean while Lohit's 3D sprite loads—never show the old 2D fallback.
-  if (lohitSpriteReady) {
+  if (lohitBaseSpriteReady || lohitSpriteReady) {
     drawShotGuide();
     drawBatter();
   }
@@ -260,8 +272,8 @@ function batterLayout() {
     spriteY,
     spriteWidth,
     spriteHeight,
-    // Right-handed Lohit's bat is in a small, bowler-facing diagonal backlift on screen-right.
-    batContact: lohitSpriteReady
+    // Right-handed Lohit's hands grip the separately animated bat on screen-right.
+    batContact: (lohitBaseSpriteReady || lohitSpriteReady)
       ? { x: spriteX + spriteWidth * 0.63, y: spriteY + spriteHeight * 0.47 }
       : { x: feet.x + 43 * scale, y: feet.y - 67 * scale }
   };
@@ -281,10 +293,87 @@ function drawShotGuide() {
 }
 
 function drawBatter() {
-  if (!lohitSpriteReady) return;
+  if (!lohitBaseSpriteReady && !lohitSpriteReady) return;
   const { spriteX, spriteY, spriteWidth, spriteHeight } = batterLayout();
-  // Draw the cleaned sprite directly so the natural 3D silhouette and diagonal bat remain intact.
+  if (lohitBaseSpriteReady) {
+    // Draw the moving bat first, letting Lohit's hands naturally sit over its handle.
+    drawAnimatedBat(batterLayout());
+    ctx.drawImage(lohitBaseSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+    return;
+  }
+  // Fallback only: retain the original full player sprite if the new base image is missing.
   ctx.drawImage(lohitSpriteClean || lohitSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+}
+
+function easeOutCubic(value) {
+  return 1 - Math.pow(1 - value, 3);
+}
+
+function getBatAngle(now = performance.now()) {
+  const idleAngle = 0.58; // Lohit's established raised backlift, angled to screen-right.
+  if (!batSwing.active) return { angle: idleAngle, progress: 0, lofted: false, active: false };
+
+  const rawProgress = Math.min(1, Math.max(0, (now - batSwing.startedAt) / batSwing.duration));
+  const eased = easeOutCubic(rawProgress);
+  const startAngle = batSwing.lofted ? 0.98 : idleAngle;
+  const travel = batSwing.angle - startAngle;
+  // Loft continues farther through the line, visually producing the larger bat arc.
+  const followThrough = batSwing.angle + travel * (batSwing.lofted ? 0.34 : 0.12);
+  if (rawProgress >= 1) batSwing.active = false;
+  return { angle: startAngle + (followThrough - startAngle) * eased, progress: rawProgress, lofted: batSwing.lofted, active: true };
+}
+
+function drawBatShape(pivot, angle, length, opacity = 1) {
+  const direction = { x: Math.sin(angle), y: -Math.cos(angle) };
+  const normal = { x: -direction.y, y: direction.x };
+  const pointAt = (distance, sideways = 0) => ({
+    x: pivot.x + direction.x * distance + normal.x * sideways,
+    y: pivot.y + direction.y * distance + normal.y * sideways
+  });
+  const handleBase = pointAt(-8);
+  const handleTop = pointAt(16);
+  const bladeBaseLeft = pointAt(13, -3.6);
+  const bladeBaseRight = pointAt(13, 3.6);
+  const bladeTipLeft = pointAt(length, -8.2);
+  const bladeTipRight = pointAt(length, 8.2);
+  const bladeGradient = ctx.createLinearGradient(handleTop.x, handleTop.y, bladeTipLeft.x, bladeTipLeft.y);
+  bladeGradient.addColorStop(0, "#9b5725");
+  bladeGradient.addColorStop(0.34, "#e8bb74");
+  bladeGradient.addColorStop(0.72, "#f4d293");
+  bladeGradient.addColorStop(1, "#b66a31");
+
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.lineCap = "round";
+  drawLine(handleBase, handleTop, "#3d2418", 4.2);
+  drawLine(pointAt(-6), pointAt(9), "#2a1710", 1.2);
+  ctx.beginPath();
+  ctx.moveTo(bladeBaseLeft.x, bladeBaseLeft.y);
+  ctx.lineTo(bladeTipLeft.x, bladeTipLeft.y);
+  ctx.quadraticCurveTo(pointAt(length + 5, 0).x, pointAt(length + 5, 0).y, bladeTipRight.x, bladeTipRight.y);
+  ctx.lineTo(bladeBaseRight.x, bladeBaseRight.y);
+  ctx.closePath();
+  ctx.fillStyle = bladeGradient;
+  ctx.fill();
+  ctx.strokeStyle = "#7d421c";
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  drawLine(pointAt(18, -1.4), pointAt(length - 4, -2.4), "rgba(255, 239, 194, .58)", 1);
+  ctx.restore();
+}
+
+function drawAnimatedBat(layout) {
+  const pose = getBatAngle();
+  const baseLength = 73 * layout.scale;
+  const swingLength = pose.lofted ? baseLength * 1.18 : baseLength;
+  // A translucent earlier position makes the chosen direction and lofted arc readable.
+  if (pose.active) {
+    const trailWeight = pose.lofted ? 0.22 : 0.16;
+    const startAngle = pose.lofted ? 0.98 : 0.58;
+    const trailAngle = startAngle + (pose.angle - startAngle) * Math.max(0, pose.progress - 0.23);
+    drawBatShape(layout.batContact, trailAngle, swingLength, trailWeight);
+  }
+  drawBatShape(layout.batContact, pose.angle, swingLength, 1);
 }
 
 function drawBowler() {
@@ -802,6 +891,11 @@ function launchBall(angle) {
   const timing = getTimingResult(timingPosition);
   // Freeze the marker where the player pressed Launch so the result remains visible.
   timingRunning = false;
+  batSwing.active = true;
+  batSwing.startedAt = performance.now();
+  batSwing.angle = angle;
+  batSwing.lofted = loftSelected;
+  batSwing.duration = loftSelected ? 510 : 300;
   // Pull the delivery into Lohit's contact area before sending it away from the bat.
   ball.x = Math.max(-0.42, Math.min(0.42, ball.x));
   ball.y = Math.max(0.82, ball.y + 0.2);
@@ -840,6 +934,7 @@ function resetBall(message) {
   delivery.bounced = false;
   placeBallInBowlerHand();
   inPlay = false;
+  batSwing.active = false;
   timingRunning = false;
   timingPosition = 0.5;
   timingMarker.style.left = "50%";
