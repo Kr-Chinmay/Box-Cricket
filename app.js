@@ -32,6 +32,17 @@ bowlerSprite.onload = () => {
 };
 bowlerSprite.src = "underarm-bowler-yellow-v2.png";
 
+// A dedicated open-palm release pose lets the bowler visibly complete an underarm action,
+// rather than simply sliding the same still image forward.
+const bowlerReleaseSprite = new Image();
+let bowlerReleaseSpriteReady = false;
+let bowlerReleaseSpriteClean = null;
+bowlerReleaseSprite.onload = () => {
+  bowlerReleaseSpriteClean = removeChromaMagenta(bowlerReleaseSprite);
+  bowlerReleaseSpriteReady = true;
+};
+bowlerReleaseSprite.src = "underarm-bowler-yellow-release-v1.png";
+
 const fielderSprite = new Image();
 let fielderSpriteReady = false;
 let fielderSpriteClean = null;
@@ -64,8 +75,8 @@ const bowlingPoppingCreaseZ = bowlingStumpsZ - 1.25;
 // Ball is reduced again for the compact underarm court, both visually and physically.
 const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.0672 };
 const delivery = { phase: "held", nextAt: 0, windupAt: 0, releasedAt: 0 };
-const deliveryDelayMs = 1700;
-const deliveryWindupMs = 430;
+const deliveryDelayMs = 2200;
+const deliveryWindupMs = 750;
 // Open with the shot guide 30° toward leg side (screen-left), clear of the bowler and front-wall labels.
 const defaultShotAngle = -30 * Math.PI / 180;
 let shotAngle = defaultShotAngle;
@@ -271,16 +282,20 @@ function drawBowler() {
   // He remains beyond the bowling crease, facing Lohit, with no run-up.
   // The lower screen-right shoe is his forward left foot: place it directly on the popping crease.
   // The naturally higher screen-left shoe then reads as the trailing right foot beside the far stumps.
-  // A compact forward movement during the underarm release gives the static sprite a delivery action.
+  // During the delivery, swap to the open-palm pose and add a small forward step.
   const releaseProgress = getBowlerReleaseProgress();
-  const feet = project(2.05, 0, bowlingPoppingCreaseZ - releaseProgress * 0.2);
+  const feet = project(2.05, 0, bowlingPoppingCreaseZ - releaseProgress * 0.34);
   const scale = Math.max(0.72, Math.min(1.05, feet.scale));
   const spriteHeight = 76 * scale;
   const spriteWidth = spriteHeight * (2 / 3);
   const spriteX = feet.x - spriteWidth / 2;
   // The generated image has a small bottom margin; this anchors its actual shoes on the turf.
   const spriteY = feet.y - spriteHeight * 0.92;
-  ctx.drawImage(bowlerSpriteClean || bowlerSprite, spriteX, spriteY, spriteWidth, spriteHeight);
+  const releasePose = releaseProgress > 0.08 && bowlerReleaseSpriteReady;
+  const sprite = releasePose
+    ? (bowlerReleaseSpriteClean || bowlerReleaseSprite)
+    : (bowlerSpriteClean || bowlerSprite);
+  ctx.drawImage(sprite, spriteX, spriteY, spriteWidth, spriteHeight);
 }
 
 function drawFielders() {
@@ -580,9 +595,9 @@ function getBowlerReleaseProgress(now = performance.now()) {
 
 function bowlerHandPosition(progress = 0) {
   return {
-    x: 1.72 - progress * 0.58,
-    y: 1.08 - progress * 0.48,
-    z: bowlingPoppingCreaseZ + 0.1 - progress * 0.58
+    x: 1.72 - progress * 0.74,
+    y: 1.08 - progress * 0.58,
+    z: bowlingPoppingCreaseZ + 0.1 - progress * 0.68
   };
 }
 
@@ -603,10 +618,11 @@ function beginDelivery(now) {
 
 function releaseDelivery(now) {
   placeBallInBowlerHand(1);
-  // An underarm release: a gentle central drift and one natural bounce before Lohit.
-  ball.vx = -1.18;
-  ball.vy = 1.1;
-  ball.vz = -8.2;
+  // A deliberately gentle first-version underarm ball: one clear bounce and enough time
+  // for a phone player to see it, judge it, and complete a swipe.
+  ball.vx = -0.7;
+  ball.vy = 0.9;
+  ball.vz = -4.8;
   delivery.phase = "incoming";
   delivery.releasedAt = now;
   timingRunning = true;
@@ -618,8 +634,8 @@ function releaseDelivery(now) {
 
 function isBallPlayable() {
   return delivery.phase === "incoming"
-    && ball.z <= battingStumpsZ + 2.45
-    && ball.z >= battingStumpsZ - 0.55;
+    && ball.z <= battingStumpsZ + 3.4
+    && ball.z >= battingStumpsZ - 1.15;
 }
 
 function updateDelivery(dt) {
@@ -654,7 +670,7 @@ function updateDelivery(dt) {
     ball.vz *= 0.91;
   }
 
-  if (ball.z < battingStumpsZ - 0.9) {
+  if (ball.z < battingStumpsZ - 1.35) {
     delivery.phase = "dead";
     timingRunning = false;
     resetTime = now + 850;
