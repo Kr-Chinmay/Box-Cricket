@@ -63,6 +63,9 @@ const bowlingStumpsZ = 3.0;
 const bowlingPoppingCreaseZ = bowlingStumpsZ - 1.25;
 // Ball is reduced again for the compact underarm court, both visually and physically.
 const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.0672 };
+const delivery = { phase: "held", nextAt: 0, windupAt: 0, releasedAt: 0 };
+const deliveryDelayMs = 1700;
+const deliveryWindupMs = 430;
 // Open with the shot guide 30° toward leg side (screen-left), clear of the bowler and front-wall labels.
 const defaultShotAngle = -30 * Math.PI / 180;
 let shotAngle = defaultShotAngle;
@@ -268,7 +271,9 @@ function drawBowler() {
   // He remains beyond the bowling crease, facing Lohit, with no run-up.
   // The lower screen-right shoe is his forward left foot: place it directly on the popping crease.
   // The naturally higher screen-left shoe then reads as the trailing right foot beside the far stumps.
-  const feet = project(2.05, 0, bowlingPoppingCreaseZ);
+  // A compact forward movement during the underarm release gives the static sprite a delivery action.
+  const releaseProgress = getBowlerReleaseProgress();
+  const feet = project(2.05, 0, bowlingPoppingCreaseZ - releaseProgress * 0.2);
   const scale = Math.max(0.72, Math.min(1.05, feet.scale));
   const spriteHeight = 76 * scale;
   const spriteWidth = spriteHeight * (2 / 3);
@@ -541,8 +546,8 @@ function drawWallLabel(text, x, y, z, color, fontSize) {
 }
 
 function drawBall() {
-  // Before a delivery, the bowler is assumed to be holding the ball off-screen.
-  if (!inPlay) return;
+  // The ball stays visible in the bowler's hand, through his release, and throughout the shot.
+  if (delivery.phase === "dead") return;
   const p = project(ball.x, ball.y, ball.z);
   const radius = Math.max(1.4, 5.46 * p.scale);
   const glow = ctx.createRadialGradient(p.x - radius * 0.25, p.y - radius * 0.3, 1, p.x, p.y, radius * 1.25);
@@ -555,7 +560,109 @@ function drawBall() {
 }
 
 function update(dt) {
-  if (!inPlay) return;
+  if (delivery.phase === "held" || delivery.phase === "windup" || delivery.phase === "incoming" || delivery.phase === "dead") {
+    updateDelivery(dt);
+    return;
+  }
+  updateShot(dt);
+}
+
+function getBowlerReleaseProgress(now = performance.now()) {
+  if (delivery.phase === "windup") {
+    return Math.min(1, Math.max(0, (now - delivery.windupAt) / deliveryWindupMs));
+  }
+  if (delivery.phase === "incoming") {
+    // Ease him back to his set position after the ball leaves his hand.
+    return Math.max(0, 1 - (now - delivery.releasedAt) / 260);
+  }
+  return 0;
+}
+
+function bowlerHandPosition(progress = 0) {
+  return {
+    x: 1.72 - progress * 0.58,
+    y: 1.08 - progress * 0.48,
+    z: bowlingPoppingCreaseZ + 0.1 - progress * 0.58
+  };
+}
+
+function placeBallInBowlerHand(progress = 0) {
+  const hand = bowlerHandPosition(progress);
+  ball.x = hand.x;
+  ball.y = hand.y;
+  ball.z = hand.z;
+  ball.vx = ball.vy = ball.vz = 0;
+}
+
+function beginDelivery(now) {
+  delivery.phase = "windup";
+  delivery.windupAt = now;
+  timingRunning = false;
+  statusElement.textContent = "Bowler is releasing an underarm delivery…";
+}
+
+function releaseDelivery(now) {
+  placeBallInBowlerHand(1);
+  // An underarm release: a gentle central drift and one natural bounce before Lohit.
+  ball.vx = -1.18;
+  ball.vy = 1.1;
+  ball.vz = -8.2;
+  delivery.phase = "incoming";
+  delivery.releasedAt = now;
+  timingRunning = true;
+  timingStartedAt = now;
+  timingPosition = 0.5;
+  timingMarker.style.left = "50%";
+  statusElement.textContent = "Ball released — swipe as it reaches Lohit.";
+}
+
+function isBallPlayable() {
+  return delivery.phase === "incoming"
+    && ball.z <= battingStumpsZ + 2.45
+    && ball.z >= battingStumpsZ - 0.55;
+}
+
+function updateDelivery(dt) {
+  const now = performance.now();
+  if (delivery.phase === "held") {
+    placeBallInBowlerHand();
+    if (now >= delivery.nextAt) beginDelivery(now);
+    return;
+  }
+
+  if (delivery.phase === "windup") {
+    const progress = Math.min(1, (now - delivery.windupAt) / deliveryWindupMs);
+    placeBallInBowlerHand(progress);
+    if (progress >= 1) releaseDelivery(now);
+    return;
+  }
+
+  if (delivery.phase === "dead") {
+    if (now >= resetTime) resetBall("Bowler has the ball — choose Loft if you want a lofted shot.");
+    return;
+  }
+
+  ball.vy -= 9.8 * dt;
+  ball.x += ball.vx * dt;
+  ball.y += ball.vy * dt;
+  ball.z += ball.vz * dt;
+
+  if (ball.y - ball.radius <= 0) {
+    ball.y = ball.radius;
+    ball.vy = Math.abs(ball.vy) * 0.61;
+    ball.vx *= 0.92;
+    ball.vz *= 0.91;
+  }
+
+  if (ball.z < battingStumpsZ - 0.9) {
+    delivery.phase = "dead";
+    timingRunning = false;
+    resetTime = now + 850;
+    statusElement.textContent = "Ball passed Lohit — next delivery coming.";
+  }
+}
+
+function updateShot(dt) {
   ball.vy -= 9.8 * dt;
   ball.x += ball.vx * dt;
   ball.y += ball.vy * dt;
@@ -586,7 +693,7 @@ function update(dt) {
     ball.z = court.nearZ + ball.radius;
     ball.vz *= -0.68;
   }
-  if (performance.now() >= resetTime || ball.z < court.nearZ + 0.2) resetBall("Ready for the next physics test.");
+  if (performance.now() >= resetTime || ball.z < court.nearZ + 0.2) resetBall("Bowler has the ball — choose Loft if you want a lofted shot.");
 }
 
 function scoreRuns(runs) {
@@ -598,17 +705,24 @@ function scoreRuns(runs) {
 }
 
 function launchBall(angle) {
-  if (inPlay) return;
+  if (!isBallPlayable()) {
+    statusElement.textContent = "Wait for the ball to reach Lohit before playing the shot.";
+    return;
+  }
   const timing = getTimingResult(timingPosition);
   // Freeze the marker where the player pressed Launch so the result remains visible.
   timingRunning = false;
-  ball.x = 0; ball.y = 1.25; ball.z = battingStumpsZ;
+  // Pull the delivery into Lohit's contact area before sending it away from the bat.
+  ball.x = Math.max(-0.42, Math.min(0.42, ball.x));
+  ball.y = Math.max(0.82, ball.y + 0.2);
+  ball.z = battingStumpsZ + 0.48;
   // Timing affects accuracy and power. Later, poor timing will also allow misses and catches.
   const shotSpeed = 20.5 * timing.power;
   ball.vx = Math.sin(angle) * shotSpeed * timing.accuracy;
   // A lofted shot has enough height to reach the upper scoring bands without hitting the roof.
   ball.vy = (loftSelected ? 10.2 : 5.9) * timing.power;
   ball.vz = Math.cos(angle) * shotSpeed;
+  delivery.phase = "shot";
   inPlay = true;
   scoredThisBall = false;
   resetTime = performance.now() + 6200;
@@ -631,11 +745,13 @@ function updateTimingGauge(now) {
 }
 
 function resetBall(message) {
-  ball.x = 0; ball.y = 1.25; ball.z = battingStumpsZ;
-  ball.vx = ball.vy = ball.vz = 0;
+  delivery.phase = "held";
+  delivery.nextAt = performance.now() + deliveryDelayMs;
+  placeBallInBowlerHand();
   inPlay = false;
-  timingRunning = true;
-  timingStartedAt = performance.now();
+  timingRunning = false;
+  timingPosition = 0.5;
+  timingMarker.style.left = "50%";
   loftButton.disabled = false;
   statusElement.textContent = message;
 }
@@ -652,14 +768,17 @@ function describeAngle(angle) {
 }
 
 function startSwipe(event) {
-  if (inPlay) return;
+  if (!isBallPlayable()) {
+    if (!inPlay) statusElement.textContent = "Wait for the underarm ball to reach Lohit.";
+    return;
+  }
   const rect = canvas.getBoundingClientRect();
   swipeStart = { x: event.clientX - rect.left, y: event.clientY - rect.top };
   canvas.setPointerCapture?.(event.pointerId);
 }
 
 function previewSwipe(event) {
-  if (!swipeStart || inPlay) return;
+  if (!swipeStart || !isBallPlayable()) return;
   const rect = canvas.getBoundingClientRect();
   const dx = event.clientX - rect.left - swipeStart.x;
   const forward = swipeStart.y - (event.clientY - rect.top);
@@ -669,7 +788,7 @@ function previewSwipe(event) {
 }
 
 function finishSwipe(event) {
-  if (!swipeStart || inPlay) return;
+  if (!swipeStart || !isBallPlayable()) return;
   const rect = canvas.getBoundingClientRect();
   const dx = event.clientX - rect.left - swipeStart.x;
   const forward = swipeStart.y - (event.clientY - rect.top);
@@ -692,7 +811,10 @@ function toggleLoft() {
 }
 
 function showShotSelection() {
-  statusElement.textContent = `${loftSelected ? "Lofted" : "Grounded"} shot selected — swipe forward to play.`;
+  const shotType = loftSelected ? "Lofted" : "Grounded";
+  statusElement.textContent = isBallPlayable()
+    ? `${shotType} shot selected — swipe forward to play.`
+    : `${shotType} shot prepared — wait for the underarm delivery.`;
 }
 
 function frame(now) {
@@ -710,10 +832,10 @@ canvas.addEventListener("pointermove", previewSwipe);
 canvas.addEventListener("pointerup", finishSwipe);
 canvas.addEventListener("pointercancel", () => {
   swipeStart = null;
-  if (!inPlay) statusElement.textContent = "Swipe forward in the court to play a shot.";
+  if (isBallPlayable()) statusElement.textContent = "Swipe forward in the court to play a shot.";
 });
 loftButton.addEventListener("click", toggleLoft);
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
-resetBall("Swipe forward in the court to play a shot.");
+resetBall("Bowler has the ball — choose Loft if you want a lofted shot.");
 requestAnimationFrame(frame);
