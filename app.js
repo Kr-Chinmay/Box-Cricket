@@ -43,6 +43,17 @@ bowlerReleaseSprite.onload = () => {
 };
 bowlerReleaseSprite.src = "underarm-bowler-yellow-release-v1.png";
 
+// The wind-up frame holds the ball behind the bowler's hip, making the delivery read as
+// a real underarm swing: set position → back-swing → open-palm release.
+const bowlerWindupSprite = new Image();
+let bowlerWindupSpriteReady = false;
+let bowlerWindupSpriteClean = null;
+bowlerWindupSprite.onload = () => {
+  bowlerWindupSpriteClean = removeChromaMagenta(bowlerWindupSprite);
+  bowlerWindupSpriteReady = true;
+};
+bowlerWindupSprite.src = "underarm-bowler-yellow-windup-v1.png";
+
 const fielderSprite = new Image();
 let fielderSpriteReady = false;
 let fielderSpriteClean = null;
@@ -282,7 +293,7 @@ function drawBowler() {
   // He remains beyond the bowling crease, facing Lohit, with no run-up.
   // The lower screen-right shoe is his forward left foot: place it directly on the popping crease.
   // The naturally higher screen-left shoe then reads as the trailing right foot beside the far stumps.
-  // During the delivery, swap to the open-palm pose and add a small forward step.
+  // A three-frame underarm action: set with ball, swing back with ball, then open palm.
   const releaseProgress = getBowlerReleaseProgress();
   const feet = project(2.05, 0, bowlingPoppingCreaseZ - releaseProgress * 0.34);
   const scale = Math.max(0.72, Math.min(1.05, feet.scale));
@@ -291,10 +302,11 @@ function drawBowler() {
   const spriteX = feet.x - spriteWidth / 2;
   // The generated image has a small bottom margin; this anchors its actual shoes on the turf.
   const spriteY = feet.y - spriteHeight * 0.92;
-  const releasePose = releaseProgress > 0.08 && bowlerReleaseSpriteReady;
-  const sprite = releasePose
-    ? (bowlerReleaseSpriteClean || bowlerReleaseSprite)
-    : (bowlerSpriteClean || bowlerSprite);
+  const sprite = delivery.phase === "windup" && bowlerWindupSpriteReady
+    ? (bowlerWindupSpriteClean || bowlerWindupSprite)
+    : (delivery.phase === "incoming" || delivery.phase === "wicketHit") && bowlerReleaseSpriteReady
+      ? (bowlerReleaseSpriteClean || bowlerReleaseSprite)
+      : (bowlerSpriteClean || bowlerSprite);
   ctx.drawImage(sprite, spriteX, spriteY, spriteWidth, spriteHeight);
 }
 
@@ -561,8 +573,9 @@ function drawWallLabel(text, x, y, z, color, fontSize) {
 }
 
 function drawBall() {
-  // The ball stays visible in the bowler's hand, through his release, and throughout the shot.
-  if (delivery.phase === "dead") return;
+  // The held and wind-up sprite frames already contain the ball in the bowler's hand.
+  // Draw the canvas ball only after his palm opens, so it visibly leaves that hand.
+  if (delivery.phase === "held" || delivery.phase === "windup" || delivery.phase === "dead") return;
   const p = project(ball.x, ball.y, ball.z);
   const radius = Math.max(1.4, 5.46 * p.scale);
   const glow = ctx.createRadialGradient(p.x - radius * 0.25, p.y - radius * 0.3, 1, p.x, p.y, radius * 1.25);
@@ -595,9 +608,10 @@ function getBowlerReleaseProgress(now = performance.now()) {
 
 function bowlerHandPosition(progress = 0) {
   return {
-    x: 1.72 - progress * 0.74,
-    y: 1.08 - progress * 0.58,
-    z: bowlingPoppingCreaseZ + 0.1 - progress * 0.68
+    // Tuned to the visible hand in the new release sprite, rather than to the bowler's feet.
+    x: 1.84 - progress * 0.06,
+    y: 1.46 + progress * 0.08,
+    z: bowlingPoppingCreaseZ + 0.06 - progress * 0.5
   };
 }
 
@@ -635,7 +649,8 @@ function releaseDelivery(now) {
 function isBallPlayable() {
   return delivery.phase === "incoming"
     && ball.z <= battingStumpsZ + 3.4
-    && ball.z >= battingStumpsZ - 1.15;
+    // Once it reaches the wicket line, a late batter has missed the ball.
+    && ball.z >= battingStumpsZ + 0.18;
 }
 
 function updateDelivery(dt) {
@@ -658,6 +673,15 @@ function updateDelivery(dt) {
     return;
   }
 
+  if (delivery.phase === "wicketHit") {
+    // Keep the ball visibly resting against the wicket for a moment before the reset.
+    if (now >= delivery.resultAt + 560) {
+      delivery.phase = "dead";
+      resetTime = now + 720;
+    }
+    return;
+  }
+
   ball.vy -= 9.8 * dt;
   ball.x += ball.vx * dt;
   ball.y += ball.vy * dt;
@@ -670,11 +694,26 @@ function updateDelivery(dt) {
     ball.vz *= 0.91;
   }
 
+  // A late straight ball now resolves naturally at the batting wicket. A ball outside the
+  // three-stump width is allowed to continue past Lohit instead of pausing for a swipe.
+  if (ball.z <= battingStumpsZ + ball.radius && ball.y <= 2.05 && Math.abs(ball.x) <= 0.43) {
+    ball.z = battingStumpsZ + ball.radius;
+    ball.y = Math.max(ball.radius * 1.2, ball.y);
+    ball.vx = ball.vy = ball.vz = 0;
+    delivery.phase = "wicketHit";
+    delivery.resultAt = now;
+    timingRunning = false;
+    wickets += 1;
+    scoreElement.textContent = `${score} / ${wickets}`;
+    statusElement.textContent = "Bowled! The ball reached Lohit's stumps.";
+    return;
+  }
+
   if (ball.z < battingStumpsZ - 1.35) {
     delivery.phase = "dead";
     timingRunning = false;
     resetTime = now + 850;
-    statusElement.textContent = "Ball passed Lohit — next delivery coming.";
+    statusElement.textContent = "Ball passed Lohit outside the stumps — next delivery coming.";
   }
 }
 
