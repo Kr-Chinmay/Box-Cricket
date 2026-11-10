@@ -477,8 +477,11 @@ function drawFielders() {
     drawFielder({ x: 11.2, z: 17.8, height: 118, mirror: true }, fielderSpriteClean || fielderSprite);
   }
   if (inwardFielderSpriteReady) {
-    drawFielder({ x: -12.4, z: -0.2, height: 80, mirror: false }, inwardFielderSpriteClean || inwardFielderSprite);
-    drawFielder({ x: 12.4, z: -0.2, height: 80, mirror: true }, inwardFielderSpriteClean || inwardFielderSprite);
+    // Keep the side-wall fielders fully inside the portrait camera frame: move them
+    // inward from the extreme side edges and deeper toward the bowling end. Their
+    // 78px world height is roughly 2.5% smaller than the earlier 80px treatment.
+    drawFielder({ x: -9.8, z: 3.2, height: 78, mirror: false }, inwardFielderSpriteClean || inwardFielderSprite);
+    drawFielder({ x: 9.8, z: 3.2, height: 78, mirror: true }, inwardFielderSpriteClean || inwardFielderSprite);
   }
 }
 
