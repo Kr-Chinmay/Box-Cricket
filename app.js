@@ -97,6 +97,14 @@ const frontWallScoreDivider = court.ceiling / 2;
 const battingStumpsZ = -7.5;
 const bowlingStumpsZ = 3.0;
 const bowlingPoppingCreaseZ = bowlingStumpsZ - 1.25;
+// These same world coordinates drive both the drawn fielders and their deterministic
+// interception zones, so the ball can only be caught or stopped where a player is visible.
+const fielders = [
+  { id: "left-front", label: "Left front-wall fielder", x: -11.2, z: 17.8, height: 118, mirror: false, pose: "deep", radius: 1.32, catchMaxHeight: 6.9 },
+  { id: "right-front", label: "Right front-wall fielder", x: 11.2, z: 17.8, height: 118, mirror: true, pose: "deep", radius: 1.32, catchMaxHeight: 6.9 },
+  { id: "leg-side", label: "Leg-side wall fielder", x: -9.8, z: 3.2, height: 78, mirror: false, pose: "side", radius: 1.18, catchMaxHeight: 3.25 },
+  { id: "off-side", label: "Off-side wall fielder", x: 9.8, z: 3.2, height: 78, mirror: true, pose: "side", radius: 1.18, catchMaxHeight: 3.25 }
+];
 // Ball is reduced again for the compact underarm court, both visually and physically.
 const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.0672 };
 const delivery = { phase: "held", nextAt: 0, windupAt: 0, releasedAt: 0, bounced: false };
@@ -118,6 +126,10 @@ let matchState = "playing";
 let pendingBallResult = null;
 let inPlay = false;
 let scoredThisBall = false;
+let shotWasLofted = false;
+let shotHasBounced = false;
+let shotHasTouchedRoof = false;
+let shotHasTouchedRearWall = false;
 let resetTime = 0;
 let lastFrame = performance.now();
 // The backlift begins with the player's finger movement; impact begins on release.
@@ -146,11 +158,11 @@ function setLastBall(text) {
   lastBallElement.textContent = `Previous ball: ${text}`;
 }
 
-function queueBallResult({ runs = 0, wicket = false, label, status }) {
+function queueBallResult({ runs = 0, wicket = false, label, status, dismissal = null, fielderLabel = null }) {
   // Only the first scoring event may decide the result of a ball. The score itself is
   // deliberately held back until play has ended and the ball is officially dead.
   if (pendingBallResult) return;
-  pendingBallResult = { runs, wicket, label, status };
+  pendingBallResult = { runs, wicket, label, status, dismissal, fielderLabel };
   scoredThisBall = runs > 0;
   if (status) statusElement.textContent = status;
 }
@@ -181,7 +193,7 @@ function completeBall() {
     return;
   }
   if (wickets >= matchConfig.maxWickets) {
-    endMatch("wicket");
+    endMatch("wicket", result);
     return;
   }
   if (ballsBowled >= matchConfig.totalBalls) {
@@ -192,7 +204,7 @@ function completeBall() {
   resetBall(`Ball ${ballsBowled + 1} of ${matchConfig.totalBalls} — choose Loft if you want a lofted shot.`);
 }
 
-function endMatch(reason) {
+function endMatch(reason, result = null) {
   matchState = "complete";
   delivery.phase = "complete";
   inPlay = false;
@@ -208,9 +220,12 @@ function endMatch(reason) {
     statusElement.textContent = "Target reached — match won!";
   } else if (reason === "wicket") {
     resultKickerElement.textContent = "Wicket down";
-    resultTitleElement.textContent = "All out";
+    const caught = result?.dismissal === "caught";
+    resultTitleElement.textContent = caught ? "Caught!" : "All out";
     resultCopyElement.textContent = `${score} / ${wickets} in ${formatOvers(ballsBowled)} overs. You needed ${runsShort} more run${runsShort === 1 ? "" : "s"}.`;
-    statusElement.textContent = "Bowled — the match is over.";
+    statusElement.textContent = caught
+      ? `Caught by ${result.fielderLabel} — the match is over.`
+      : "Bowled — the match is over.";
   } else {
     resultKickerElement.textContent = "Four overs complete";
     resultTitleElement.textContent = "Target missed";
@@ -473,15 +488,14 @@ function drawFielders() {
   // Two deep fielders protect the front wall. The side-wall pair use a separate front
   // three-quarter pose, so their chest, feet, and eyes all face Lohit.
   if (fielderSpriteReady) {
-    drawFielder({ x: -11.2, z: 17.8, height: 118, mirror: false }, fielderSpriteClean || fielderSprite);
-    drawFielder({ x: 11.2, z: 17.8, height: 118, mirror: true }, fielderSpriteClean || fielderSprite);
+    fielders
+      .filter((fielder) => fielder.pose === "deep")
+      .forEach((fielder) => drawFielder(fielder, fielderSpriteClean || fielderSprite));
   }
   if (inwardFielderSpriteReady) {
-    // Keep the side-wall fielders fully inside the portrait camera frame: move them
-    // inward from the extreme side edges and deeper toward the bowling end. Their
-    // 78px world height is roughly 2.5% smaller than the earlier 80px treatment.
-    drawFielder({ x: -9.8, z: 3.2, height: 78, mirror: false }, inwardFielderSpriteClean || inwardFielderSprite);
-    drawFielder({ x: 9.8, z: 3.2, height: 78, mirror: true }, inwardFielderSpriteClean || inwardFielderSprite);
+    fielders
+      .filter((fielder) => fielder.pose === "side")
+      .forEach((fielder) => drawFielder(fielder, inwardFielderSpriteClean || inwardFielderSprite));
   }
 }
 
@@ -708,6 +722,10 @@ function drawBall() {
 
 function update(dt) {
   if (!isMatchActive()) return;
+  if (delivery.phase === "fielderCaught" || delivery.phase === "fielderStopped") {
+    updateFielderResolution();
+    return;
+  }
   if (delivery.phase === "held" || delivery.phase === "windup" || delivery.phase === "incoming" || delivery.phase === "wicketHit" || delivery.phase === "dead") {
     updateDelivery(dt);
     return;
@@ -830,6 +848,7 @@ function updateDelivery(dt) {
     timingRunning = false;
     queueBallResult({
       wicket: true,
+      dismissal: "bowled",
       label: "Wicket — bowled",
       status: "Bowled! Lohit's stumps are dismantled."
     });
@@ -853,10 +872,20 @@ function updateShot(dt) {
     ball.vy = Math.abs(ball.vy) * 0.61;
     ball.vx *= 0.9;
     ball.vz *= 0.9;
+    shotHasBounced = true;
   }
   if (ball.y + ball.radius >= court.ceiling) {
     ball.y = court.ceiling - ball.radius;
     ball.vy = -Math.abs(ball.vy) * 0.72;
+    // Rebound catches are intentionally excluded from V1. A roof touch can still
+    // lead to a later ground stop after the ball comes down.
+    shotHasTouchedRoof = true;
+  }
+
+  // Fielders are tested before the scoring walls. This makes their visual positions
+  // authoritative: a ball can only be stopped or caught by a player it visibly reaches.
+  if (resolveFielderInteraction()) {
+    return;
   }
   if (ball.x - ball.radius <= -court.halfWidth || ball.x + ball.radius >= court.halfWidth) {
     const hitLeft = ball.x < 0;
@@ -872,8 +901,71 @@ function updateShot(dt) {
   if (ball.z - ball.radius <= court.nearZ) {
     ball.z = court.nearZ + ball.radius;
     ball.vz *= -0.68;
+    // Rear-wall rebound catches are deliberately deferred to Fielder Interaction V2.
+    shotHasTouchedRearWall = true;
   }
   if (performance.now() >= resetTime || ball.z < court.nearZ + 0.2) finishCurrentBall(450);
+}
+
+function resolveFielderInteraction() {
+  // A scoring wall always wins if it was reached first, and a resolved fielder event
+  // must never be replaced by another event later in the same ball.
+  if (scoredThisBall || pendingBallResult) return false;
+
+  const fielder = fielders.find((candidate) => {
+    const distance = Math.hypot(ball.x - candidate.x, ball.z - candidate.z);
+    return distance <= candidate.radius;
+  });
+  if (!fielder) return false;
+
+  const canCatch = shotWasLofted
+    && !shotHasBounced
+    && !shotHasTouchedRoof
+    && !shotHasTouchedRearWall
+    && ball.y >= 0.8
+    && ball.y <= fielder.catchMaxHeight;
+
+  if (canCatch) {
+    // Freeze the ball at its visible catch point. The deeper front-wall fielders can
+    // take a high overhead catch; side-wall fielders use a lower, body-height window.
+    ball.x = fielder.x;
+    ball.y = Math.max(1.2, Math.min(fielder.catchMaxHeight, ball.y));
+    ball.z = fielder.z;
+    ball.vx = ball.vy = ball.vz = 0;
+    delivery.phase = "fielderCaught";
+    delivery.resultAt = performance.now();
+    queueBallResult({
+      wicket: true,
+      dismissal: "caught",
+      fielderLabel: fielder.label,
+      label: `Wicket — caught by ${fielder.label}`,
+      status: `Caught by ${fielder.label}!`
+    });
+    return true;
+  }
+
+  const canStop = !shotWasLofted || shotHasBounced || ball.y <= 0.8;
+  if (!canStop) return false;
+
+  // A static fielder can gather a grounded or previously bounced ball, but does not
+  // turn a high loft into an unrealistic catch.
+  ball.x = fielder.x;
+  ball.y = ball.radius;
+  ball.z = fielder.z;
+  ball.vx = ball.vy = ball.vz = 0;
+  delivery.phase = "fielderStopped";
+  delivery.resultAt = performance.now();
+  queueBallResult({
+    label: `Dot ball — stopped by ${fielder.label}`,
+    status: `Stopped by ${fielder.label} — dot ball.`
+  });
+  return true;
+}
+
+function updateFielderResolution() {
+  // Leave the ball visibly at the fielder for a short beat. The official ball result
+  // is still applied only after this display period, via completeBall().
+  if (performance.now() >= delivery.resultAt + 700) finishCurrentBall(420);
 }
 
 function scoreRuns(runs) {
@@ -910,6 +1002,10 @@ function launchBall(angle) {
   delivery.phase = "shot";
   inPlay = true;
   scoredThisBall = false;
+  shotWasLofted = loftSelected;
+  shotHasBounced = false;
+  shotHasTouchedRoof = false;
+  shotHasTouchedRearWall = false;
   resetTime = performance.now() + 6200;
   loftButton.disabled = true;
   statusElement.textContent = `${timing.label} timing — ${loftSelected ? "lofted" : "grounded"} ball in play…`;
@@ -937,6 +1033,10 @@ function resetBall(message) {
   placeBallInBowlerHand();
   inPlay = false;
   scoredThisBall = false;
+  shotWasLofted = false;
+  shotHasBounced = false;
+  shotHasTouchedRoof = false;
+  shotHasTouchedRearWall = false;
   driveAnimation.phase = "idle";
   timingRunning = false;
   timingPosition = 0.5;
