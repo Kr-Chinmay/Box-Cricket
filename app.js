@@ -9,6 +9,8 @@ const oversElement = document.getElementById("overs");
 const targetElement = document.getElementById("target");
 const runsRequiredElement = document.getElementById("runs-required");
 const lastBallElement = document.getElementById("last-ball");
+const activeBatterElement = document.getElementById("active-batter");
+const shotHintElement = document.getElementById("shot-hint");
 const statusElement = document.getElementById("status");
 const matchResultElement = document.getElementById("match-result");
 const resultKickerElement = document.getElementById("result-kicker");
@@ -36,6 +38,55 @@ const lohitDriveMotionSprites = [
   image.src = src;
   return image;
 });
+
+// The batting order is deliberately data-driven: later we can change player order,
+// artwork, or player-specific abilities here without touching the match rules.
+function loadBatterSprite(src) {
+  const image = new Image();
+  image.src = src;
+  return image;
+}
+
+function createBatter({ id, name, stance, motion, profile }) {
+  return {
+    id,
+    name,
+    profile,
+    stance: loadBatterSprite(stance),
+    motion: motion.map(loadBatterSprite)
+  };
+}
+
+const batters = [
+  {
+    id: "lohit",
+    name: "Lohit",
+    profile: "approved base player",
+    stance: lohitStanceSprite,
+    motion: lohitDriveMotionSprites
+  },
+  createBatter({
+    id: "samrat",
+    name: "Samrat",
+    profile: "102% height, lean build",
+    stance: "samrat-batter-stance-v1.png",
+    motion: ["samrat-batter-load-v1.png", "samrat-batter-contact-v1.png", "samrat-batter-followthrough-v1.png"]
+  }),
+  createBatter({
+    id: "saadiq",
+    name: "Saadiq",
+    profile: "105% height, sturdier build",
+    stance: "saadiq-batter-stance-v1.png",
+    motion: ["saadiq-batter-load-v1.png", "saadiq-batter-contact-v1.png", "saadiq-batter-followthrough-v1.png"]
+  }),
+  createBatter({
+    id: "yashpreet",
+    name: "Yashpreet",
+    profile: "107% height, tall lean build",
+    stance: "yashpreet-batter-stance-v1.png",
+    motion: ["yashpreet-batter-load-v1.png", "yashpreet-batter-contact-v1.png", "yashpreet-batter-followthrough-v1.png"]
+  })
+];
 
 const bowlerSprite = new Image();
 let bowlerSpriteReady = false;
@@ -149,7 +200,7 @@ const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.
 const delivery = { phase: "held", nextAt: 0, windupAt: 0, releasedAt: 0, bounced: false };
 const deliveryDelayMs = 2200;
 const deliveryWindupMs = 750;
-const matchConfig = { target: 40, totalBalls: 24, maxWickets: 1 };
+const matchConfig = { target: 40, totalBalls: 24, maxWickets: batters.length };
 // Open with the shot guide 30° toward leg side (screen-left), clear of the bowler and front-wall labels.
 const defaultShotAngle = -30 * Math.PI / 180;
 let shotAngle = defaultShotAngle;
@@ -161,6 +212,8 @@ let timingStartedAt = performance.now();
 let score = 0;
 let wickets = 0;
 let ballsBowled = 0;
+let activeBatterIndex = 0;
+let batterChange = null;
 let matchState = "playing";
 let pendingBallResult = null;
 let inPlay = false;
@@ -184,10 +237,24 @@ function formatOvers(ballCount) {
   return `${Math.floor(ballCount / 6)}.${ballCount % 6}`;
 }
 
+function activeBatter() {
+  return batters[activeBatterIndex];
+}
+
+function isLoaded(image) {
+  return Boolean(image?.complete && image.naturalWidth);
+}
+
+function isBatterReady(batter = activeBatter()) {
+  return Boolean(batter && isLoaded(batter.stance) && batter.motion.every(isLoaded));
+}
+
 function updateHud() {
   scoreElement.textContent = `${score} / ${wickets}`;
   oversElement.textContent = `${formatOvers(ballsBowled)} / 4`;
   targetElement.textContent = String(matchConfig.target);
+  activeBatterElement.textContent = activeBatter().name;
+  shotHintElement.textContent = `Choose Loft before the release. Watch the underarm delivery, then swipe forward from straight to 70° left or right before the ball reaches ${activeBatter().name}'s stumps.`;
   const runsRequired = Math.max(0, matchConfig.target - score);
   runsRequiredElement.textContent = runsRequired === 0
     ? "Target reached"
@@ -240,8 +307,58 @@ function completeBall() {
     endMatch("overs");
     return;
   }
+  if (result.wicket) {
+    beginNextBatterTransition(result);
+    return;
+  }
 
   resetBall(`Ball ${ballsBowled + 1} of ${matchConfig.totalBalls} — choose Loft if you want a lofted shot.`);
+}
+
+function beginNextBatterTransition(result) {
+  const dismissed = activeBatter();
+  const nextBatterIndex = activeBatterIndex + 1;
+  const nextBatter = batters[nextBatterIndex];
+  if (!nextBatter) {
+    endMatch("wicket", result);
+    return;
+  }
+
+  const dismissal = result.dismissal === "caught"
+    ? `${dismissed.name} caught by ${result.fielderLabel}`
+    : `${dismissed.name} bowled`;
+  batterChange = {
+    startedAt: performance.now(),
+    nextBatterIndex,
+    nextBatterName: nextBatter.name,
+    switched: false
+  };
+  delivery.phase = "batterChange";
+  inPlay = false;
+  timingRunning = false;
+  swipeStart = null;
+  driveAnimation.phase = "idle";
+  loftButton.disabled = true;
+  statusElement.textContent = `${dismissal} — ${nextBatter.name} is coming in.`;
+}
+
+function updateBatterChange() {
+  if (!batterChange) return;
+  const elapsed = performance.now() - batterChange.startedAt;
+  if (!batterChange.switched && elapsed >= 360) {
+    activeBatterIndex = batterChange.nextBatterIndex;
+    batterChange.switched = true;
+    updateHud();
+  }
+  if (batterChange.switched && elapsed >= 920) {
+    if (!isBatterReady()) {
+      statusElement.textContent = `${batterChange.nextBatterName} is taking guard…`;
+      return;
+    }
+    const incomingName = activeBatter().name;
+    batterChange = null;
+    resetBall(`${incomingName} is now batting — Ball ${ballsBowled + 1} of ${matchConfig.totalBalls}.`);
+  }
 }
 
 function endMatch(reason, result = null) {
@@ -256,7 +373,7 @@ function endMatch(reason, result = null) {
   if (reason === "win") {
     resultKickerElement.textContent = "Target chased";
     resultTitleElement.textContent = "You win!";
-    resultCopyElement.textContent = `${score} / ${wickets} in ${formatOvers(ballsBowled)} overs — Lohit reaches ${matchConfig.target}.`;
+    resultCopyElement.textContent = `${score} / ${wickets} in ${formatOvers(ballsBowled)} overs — ${activeBatter().name} reaches ${matchConfig.target}.`;
     statusElement.textContent = "Target reached — match won!";
   } else if (reason === "wicket") {
     resultKickerElement.textContent = "Wicket down";
@@ -281,6 +398,8 @@ function startNewMatch() {
   score = 0;
   wickets = 0;
   ballsBowled = 0;
+  activeBatterIndex = 0;
+  batterChange = null;
   matchState = "playing";
   pendingBallResult = null;
   scoredThisBall = false;
@@ -418,11 +537,10 @@ function drawCourt() {
   drawBowler();
   drawWicket(bowlingStumpsZ, 1.45);
   drawFielders();
-  // Keep the arena clean while Lohit's approved ready stance loads—never show an older pose.
-  if (lohitStanceReady) {
-    drawShotGuide();
-    drawBatter();
-  }
+  // Keep the arena clean while a player frame loads—never substitute Lohit's or an old
+  // 2D image for the incoming batter.
+  if (!batterChange && isBatterReady()) drawShotGuide();
+  drawBatter();
   // The batting wicket is closest to the camera, so it is drawn after the batter.
   drawWicket(battingStumpsZ, 2.0, true);
 
@@ -475,30 +593,39 @@ function drawShotGuide() {
 }
 
 function drawBatter() {
-  if (!lohitStanceReady) return;
+  if (!isBatterReady()) return;
   const { spriteX, spriteY, spriteWidth, spriteHeight } = batterLayout();
   const sprite = getDriveSprite();
+  if (!sprite) return;
+  const changeElapsed = batterChange ? performance.now() - batterChange.startedAt : null;
+  let opacity = 1;
+  if (batterChange && !batterChange.switched) opacity = Math.max(0, 1 - changeElapsed / 280);
+  if (batterChange?.switched) opacity = Math.min(1, Math.max(0, (changeElapsed - 360) / 260));
+  if (opacity <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = opacity;
   ctx.drawImage(sprite, spriteX, spriteY, spriteWidth, spriteHeight);
+  ctx.restore();
 }
 
 function getDriveSprite(now = performance.now()) {
-  if (driveAnimation.phase === "idle") return lohitStanceSprite;
-  if (driveAnimation.phase === "backlift") return getMotionSprite(0);
+  const batter = activeBatter();
+  if (!isBatterReady(batter)) return null;
+  if (driveAnimation.phase === "idle") return batter.stance;
+  if (driveAnimation.phase === "backlift") return getMotionSprite(batter, 0);
 
   const elapsed = now - driveAnimation.startedAt;
-  if (elapsed < 145) return getMotionSprite(1); // impact happens as the ball launches
-  if (elapsed < 455) return getMotionSprite(2); // controlled follow-through after impact
+  if (elapsed < 145) return getMotionSprite(batter, 1); // impact happens as the ball launches
+  if (elapsed < 455) return getMotionSprite(batter, 2); // controlled follow-through after impact
 
   driveAnimation.phase = "idle";
-  return lohitStanceSprite;
+  return batter.stance;
 }
 
-function getMotionSprite(index) {
-  const motionSprite = lohitDriveMotionSprites[index];
-  // Never replace the signed-off stance with an unloaded frame on a slow phone connection.
-  if (!motionSprite.complete || !motionSprite.naturalWidth) {
-    return lohitStanceSprite;
-  }
+function getMotionSprite(batter, index) {
+  const motionSprite = batter.motion[index];
+  // Never replace a player with Lohit or an old pose on a slow phone connection.
+  if (!isLoaded(motionSprite)) return null;
   return motionSprite;
 }
 
@@ -763,7 +890,7 @@ function drawWallLabel(text, x, y, z, color, fontSize) {
 function drawBall() {
   // The held and wind-up sprite frames already contain the ball in the bowler's hand.
   // Draw the canvas ball only after his palm opens, so it visibly leaves that hand.
-  if (delivery.phase === "held" || delivery.phase === "windup" || delivery.phase === "dead" || delivery.phase === "complete") return;
+  if (["held", "windup", "dead", "batterChange", "complete"].includes(delivery.phase)) return;
   const p = project(ball.x, ball.y, ball.z);
   const radius = Math.max(1.4, 5.46 * p.scale);
   const glow = ctx.createRadialGradient(p.x - radius * 0.25, p.y - radius * 0.3, 1, p.x, p.y, radius * 1.25);
@@ -907,6 +1034,10 @@ function resetFielderPositions() {
 function update(dt) {
   if (!isMatchActive()) return;
   updateFielders(dt);
+  if (delivery.phase === "batterChange") {
+    updateBatterChange();
+    return;
+  }
   if (delivery.phase === "fielderCaught" || delivery.phase === "fielderStopped") {
     updateFielderResolution();
     return;
@@ -1035,7 +1166,7 @@ function updateDelivery(dt) {
       wicket: true,
       dismissal: "bowled",
       label: "Wicket — bowled",
-      status: "Bowled! Lohit's stumps are dismantled."
+      status: `Bowled! ${activeBatter().name}'s stumps are dismantled.`
     });
     return;
   }
@@ -1119,7 +1250,7 @@ function resolveFielderInteraction() {
       dismissal: "caught",
       fielderLabel: fielder.label,
       label: `Wicket — caught by ${fielder.label}`,
-      status: `Caught by ${fielder.label}!`
+      status: `${activeBatter().name} caught by ${fielder.label}!`
     });
     return true;
   }

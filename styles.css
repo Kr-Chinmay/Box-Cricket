@@ -48,6 +48,14 @@ strong { font-size: 1.55rem; }
 }
 .match-summary span:last-child { text-align: right; color: #b7c3b7; }
 
+.active-batter {
+  margin: -5px 4px 10px;
+  color: #b7c3b7;
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+}
+.active-batter strong { color: #f3d37c; font-size: 0.88rem; }
+
 canvas {
   width: 100%;
   height: min(62vh, 760px);
