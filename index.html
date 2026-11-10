@@ -10,11 +10,24 @@
   <body>
     <main class="game-shell">
       <header class="scoreboard" aria-label="Match scoreboard">
-        <div><span class="eyebrow">Physics prototype</span><strong id="score">0 / 0</strong></div>
-        <div class="target"><span class="eyebrow">Target</span><strong>40</strong></div>
+        <div class="hud-cell"><span class="eyebrow">Score</span><strong id="score">0 / 0</strong></div>
+        <div class="hud-cell hud-centre"><span class="eyebrow">Overs</span><strong id="overs">0.0 / 4</strong></div>
+        <div class="hud-cell target"><span class="eyebrow">Target</span><strong id="target">40</strong></div>
       </header>
 
+      <div class="match-summary" aria-label="Match summary">
+        <span id="runs-required">40 runs to win</span>
+        <span id="last-ball">Previous ball: —</span>
+      </div>
+
       <canvas id="game" class="is-loading" width="420" height="760" aria-label="Box Cricket playable court"></canvas>
+
+      <section id="match-result" class="match-result" aria-live="assertive" aria-hidden="true" hidden>
+        <p id="result-kicker" class="eyebrow">Match complete</p>
+        <h1 id="result-title">You win!</h1>
+        <p id="result-copy"></p>
+        <button id="play-again" type="button">Play Again</button>
+      </section>
 
       <section class="controls" aria-label="Prototype controls">
         <p id="status" aria-live="polite">Swipe forward in the court to play a shot.</p>
@@ -29,6 +42,6 @@
       </section>
     </main>
     <!-- Version the game script itself so GitHub Pages/browser caches cannot retain an older build. -->
-    <script src="app.js?v=straight-drive-sync-v1"></script>
+    <script src="app.js?v=match-hud-v1"></script>
   </body>
 </html>

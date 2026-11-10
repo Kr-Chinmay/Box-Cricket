@@ -5,7 +5,16 @@ const ctx = canvas.getContext("2d");
 const loftButton = document.getElementById("loft");
 const timingMarker = document.getElementById("timing-marker");
 const scoreElement = document.getElementById("score");
+const oversElement = document.getElementById("overs");
+const targetElement = document.getElementById("target");
+const runsRequiredElement = document.getElementById("runs-required");
+const lastBallElement = document.getElementById("last-ball");
 const statusElement = document.getElementById("status");
+const matchResultElement = document.getElementById("match-result");
+const resultKickerElement = document.getElementById("result-kicker");
+const resultTitleElement = document.getElementById("result-title");
+const resultCopyElement = document.getElementById("result-copy");
+const playAgainButton = document.getElementById("play-again");
 // Freeze Lohit on one correct, compact ready stance before introducing any further
 // movement. A bat swing will be re-added only after this pose is approved in-game.
 const lohitStanceSprite = new Image();
@@ -93,6 +102,7 @@ const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.
 const delivery = { phase: "held", nextAt: 0, windupAt: 0, releasedAt: 0, bounced: false };
 const deliveryDelayMs = 2200;
 const deliveryWindupMs = 750;
+const matchConfig = { target: 40, totalBalls: 24, maxWickets: 1 };
 // Open with the shot guide 30° toward leg side (screen-left), clear of the bowler and front-wall labels.
 const defaultShotAngle = -30 * Math.PI / 180;
 let shotAngle = defaultShotAngle;
@@ -103,6 +113,9 @@ let timingRunning = true;
 let timingStartedAt = performance.now();
 let score = 0;
 let wickets = 0;
+let ballsBowled = 0;
+let matchState = "playing";
+let pendingBallResult = null;
 let inPlay = false;
 let scoredThisBall = false;
 let resetTime = 0;
@@ -110,6 +123,123 @@ let lastFrame = performance.now();
 // The backlift begins with the player's finger movement; impact begins on release.
 // Keeping those two moments separate prevents the visual swing from trailing the ball.
 const driveAnimation = { phase: "idle", startedAt: 0 };
+
+function isMatchActive() {
+  return matchState === "playing";
+}
+
+function formatOvers(ballCount) {
+  return `${Math.floor(ballCount / 6)}.${ballCount % 6}`;
+}
+
+function updateHud() {
+  scoreElement.textContent = `${score} / ${wickets}`;
+  oversElement.textContent = `${formatOvers(ballsBowled)} / 4`;
+  targetElement.textContent = String(matchConfig.target);
+  const runsRequired = Math.max(0, matchConfig.target - score);
+  runsRequiredElement.textContent = runsRequired === 0
+    ? "Target reached"
+    : `${runsRequired} run${runsRequired === 1 ? "" : "s"} to win`;
+}
+
+function setLastBall(text) {
+  lastBallElement.textContent = `Previous ball: ${text}`;
+}
+
+function queueBallResult({ runs = 0, wicket = false, label, status }) {
+  // Only the first scoring event may decide the result of a ball. The score itself is
+  // deliberately held back until play has ended and the ball is officially dead.
+  if (pendingBallResult) return;
+  pendingBallResult = { runs, wicket, label, status };
+  scoredThisBall = runs > 0;
+  if (status) statusElement.textContent = status;
+}
+
+function finishCurrentBall(delayMs = 500) {
+  if (!isMatchActive() || delivery.phase === "dead" || delivery.phase === "complete") return;
+  if (!pendingBallResult) {
+    queueBallResult({ label: "Dot ball", status: "Dot ball — no score." });
+  }
+  delivery.phase = "dead";
+  inPlay = false;
+  timingRunning = false;
+  resetTime = performance.now() + delayMs;
+}
+
+function completeBall() {
+  if (!isMatchActive()) return;
+  const result = pendingBallResult || { runs: 0, wicket: false, label: "Dot ball" };
+  score += result.runs;
+  wickets += result.wicket ? 1 : 0;
+  ballsBowled += 1;
+  pendingBallResult = null;
+  updateHud();
+  setLastBall(result.label);
+
+  if (score >= matchConfig.target) {
+    endMatch("win");
+    return;
+  }
+  if (wickets >= matchConfig.maxWickets) {
+    endMatch("wicket");
+    return;
+  }
+  if (ballsBowled >= matchConfig.totalBalls) {
+    endMatch("overs");
+    return;
+  }
+
+  resetBall(`Ball ${ballsBowled + 1} of ${matchConfig.totalBalls} — choose Loft if you want a lofted shot.`);
+}
+
+function endMatch(reason) {
+  matchState = "complete";
+  delivery.phase = "complete";
+  inPlay = false;
+  timingRunning = false;
+  swipeStart = null;
+  loftButton.disabled = true;
+
+  const runsShort = Math.max(0, matchConfig.target - score);
+  if (reason === "win") {
+    resultKickerElement.textContent = "Target chased";
+    resultTitleElement.textContent = "You win!";
+    resultCopyElement.textContent = `${score} / ${wickets} in ${formatOvers(ballsBowled)} overs — Lohit reaches ${matchConfig.target}.`;
+    statusElement.textContent = "Target reached — match won!";
+  } else if (reason === "wicket") {
+    resultKickerElement.textContent = "Wicket down";
+    resultTitleElement.textContent = "All out";
+    resultCopyElement.textContent = `${score} / ${wickets} in ${formatOvers(ballsBowled)} overs. You needed ${runsShort} more run${runsShort === 1 ? "" : "s"}.`;
+    statusElement.textContent = "Bowled — the match is over.";
+  } else {
+    resultKickerElement.textContent = "Four overs complete";
+    resultTitleElement.textContent = "Target missed";
+    resultCopyElement.textContent = `${score} / ${wickets} after 4 overs. You needed ${runsShort} more run${runsShort === 1 ? "" : "s"}.`;
+    statusElement.textContent = "Innings complete.";
+  }
+
+  matchResultElement.hidden = false;
+  matchResultElement.setAttribute("aria-hidden", "false");
+}
+
+function startNewMatch() {
+  score = 0;
+  wickets = 0;
+  ballsBowled = 0;
+  matchState = "playing";
+  pendingBallResult = null;
+  scoredThisBall = false;
+  shotAngle = defaultShotAngle;
+  loftSelected = false;
+  loftButton.classList.remove("is-selected");
+  loftButton.setAttribute("aria-pressed", "false");
+  loftButton.textContent = "Loft: Off";
+  matchResultElement.hidden = true;
+  matchResultElement.setAttribute("aria-hidden", "true");
+  updateHud();
+  setLastBall("—");
+  resetBall("Ball 1 of 24 — choose Loft if you want a lofted shot.");
+}
 
 function resizeCanvas() {
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -561,7 +691,7 @@ function drawWallLabel(text, x, y, z, color, fontSize) {
 function drawBall() {
   // The held and wind-up sprite frames already contain the ball in the bowler's hand.
   // Draw the canvas ball only after his palm opens, so it visibly leaves that hand.
-  if (delivery.phase === "held" || delivery.phase === "windup" || delivery.phase === "dead") return;
+  if (delivery.phase === "held" || delivery.phase === "windup" || delivery.phase === "dead" || delivery.phase === "complete") return;
   const p = project(ball.x, ball.y, ball.z);
   const radius = Math.max(1.4, 5.46 * p.scale);
   const glow = ctx.createRadialGradient(p.x - radius * 0.25, p.y - radius * 0.3, 1, p.x, p.y, radius * 1.25);
@@ -574,6 +704,7 @@ function drawBall() {
 }
 
 function update(dt) {
+  if (!isMatchActive()) return;
   if (delivery.phase === "held" || delivery.phase === "windup" || delivery.phase === "incoming" || delivery.phase === "wicketHit" || delivery.phase === "dead") {
     updateDelivery(dt);
     return;
@@ -610,6 +741,7 @@ function placeBallInBowlerHand(progress = 0) {
 }
 
 function beginDelivery(now) {
+  if (!isMatchActive()) return;
   delivery.phase = "windup";
   delivery.windupAt = now;
   timingRunning = false;
@@ -634,7 +766,8 @@ function releaseDelivery(now) {
 }
 
 function isBallPlayable() {
-  return delivery.phase === "incoming"
+  return isMatchActive()
+    && delivery.phase === "incoming"
     && ball.z <= battingStumpsZ + 4.2
     // Once it reaches the wicket line, a late batter has missed the ball.
     && ball.z >= battingStumpsZ + 0.18;
@@ -656,15 +789,14 @@ function updateDelivery(dt) {
   }
 
   if (delivery.phase === "dead") {
-    if (now >= resetTime) resetBall("Bowler has the ball — choose Loft if you want a lofted shot.");
+    if (now >= resetTime) completeBall();
     return;
   }
 
   if (delivery.phase === "wicketHit") {
     // Keep the ball visibly resting against the wicket for a moment before the reset.
     if (now >= delivery.resultAt + 760) {
-      delivery.phase = "dead";
-      resetTime = now + 720;
+      finishCurrentBall(520);
     }
     return;
   }
@@ -693,17 +825,17 @@ function updateDelivery(dt) {
     delivery.phase = "wicketHit";
     delivery.resultAt = now;
     timingRunning = false;
-    wickets += 1;
-    scoreElement.textContent = `${score} / ${wickets}`;
-    statusElement.textContent = "Bowled! Lohit's stumps are dismantled.";
+    queueBallResult({
+      wicket: true,
+      label: "Wicket — bowled",
+      status: "Bowled! Lohit's stumps are dismantled."
+    });
     return;
   }
 
   if (ball.z < battingStumpsZ - 1.35) {
-    delivery.phase = "dead";
-    timingRunning = false;
-    resetTime = now + 850;
-    statusElement.textContent = "Ball passed Lohit outside the stumps — next delivery coming.";
+    queueBallResult({ label: "Dot ball", status: "Ball passed Lohit outside the stumps — dot ball." });
+    finishCurrentBall(500);
   }
 }
 
@@ -738,14 +870,15 @@ function updateShot(dt) {
     ball.z = court.nearZ + ball.radius;
     ball.vz *= -0.68;
   }
-  if (performance.now() >= resetTime || ball.z < court.nearZ + 0.2) resetBall("Bowler has the ball — choose Loft if you want a lofted shot.");
+  if (performance.now() >= resetTime || ball.z < court.nearZ + 0.2) finishCurrentBall(450);
 }
 
 function scoreRuns(runs) {
-  scoredThisBall = true;
-  score += runs;
-  scoreElement.textContent = `${score} / ${wickets}`;
-  statusElement.textContent = `${runs} run${runs === 1 ? "" : "s"}! First scoring-wall contact is locked.`;
+  queueBallResult({
+    runs,
+    label: `${runs} run${runs === 1 ? "" : "s"}`,
+    status: `${runs} run${runs === 1 ? "" : "s"}! First scoring-wall contact is locked.`
+  });
   resetTime = performance.now() + 1450;
 }
 
@@ -794,11 +927,13 @@ function updateTimingGauge(now) {
 }
 
 function resetBall(message) {
+  if (!isMatchActive()) return;
   delivery.phase = "held";
   delivery.nextAt = performance.now() + deliveryDelayMs;
   delivery.bounced = false;
   placeBallInBowlerHand();
   inPlay = false;
+  scoredThisBall = false;
   driveAnimation.phase = "idle";
   timingRunning = false;
   timingPosition = 0.5;
@@ -819,6 +954,7 @@ function describeAngle(angle) {
 }
 
 function startSwipe(event) {
+  if (!isMatchActive()) return;
   if (!isBallPlayable()) {
     if (!inPlay) statusElement.textContent = "Wait for the underarm ball to reach Lohit.";
     return;
@@ -862,7 +998,7 @@ function finishSwipe(event) {
 }
 
 function toggleLoft() {
-  if (inPlay) return;
+  if (!isMatchActive() || inPlay) return;
   loftSelected = !loftSelected;
   loftButton.classList.toggle("is-selected", loftSelected);
   loftButton.setAttribute("aria-pressed", String(loftSelected));
@@ -896,7 +1032,8 @@ canvas.addEventListener("pointercancel", () => {
   if (isBallPlayable()) statusElement.textContent = "Swipe forward in the court to play a shot.";
 });
 loftButton.addEventListener("click", toggleLoft);
+playAgainButton.addEventListener("click", startNewMatch);
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
-resetBall("Bowler has the ball — choose Loft if you want a lofted shot.");
+startNewMatch();
 requestAnimationFrame(frame);
