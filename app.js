@@ -87,6 +87,20 @@ inwardFielderSprite.onload = () => {
 };
 inwardFielderSprite.src = "fielder-yellow-facing-batter-v1.png";
 
+// Transparent V2 action poses replace the old effect of merely translating a fixed
+// fielder cutout. Each pose is optional at load time and falls back to the ready sprite.
+function loadTransparentSprite(src) {
+  const image = new Image();
+  image.src = src;
+  return image;
+}
+
+const fielderShuffleSprite = loadTransparentSprite("fielder-yellow-shuffle-v2.png");
+const fielderStopSprite = loadTransparentSprite("fielder-yellow-stop-v2.png");
+const fielderCatchSprite = loadTransparentSprite("fielder-yellow-catch-v2.png");
+const bowlerStopSprite = loadTransparentSprite("bowler-yellow-stop-v2.png");
+const bowlerCatchSprite = loadTransparentSprite("bowler-yellow-catch-v2.png");
+
 // This is the approved wide-box footprint: a further 25% wider than the first arena
 // expansion, with the front wall set deeper into the court. The pitch and player
 // coordinates remain unchanged, so the extra area belongs to the box and fielders.
@@ -101,16 +115,35 @@ const bowlingPoppingCreaseZ = bowlingStumpsZ - 1.25;
 // In this arena that is roughly two world units: visible movement, but never a dive
 // or an unrealistic run across half the court.
 const fielderMoveLimit = court.halfWidth * 2 * 0.05;
-const fielderMoveSpeed = 5.4;
-const fielderActivationPadding = 4.4;
+const fielderMoveSpeed = 5.7;
+const fielderAcceleration = 18;
+const fielderDeceleration = 24;
 // These same world coordinates drive both the drawn fielders and their deterministic
 // interception zones, so the ball can only be caught or stopped where a player is visible.
 const fielders = [
-  { id: "left-front", label: "Left front-wall fielder", x: -11.2, z: 17.8, homeX: -11.2, homeZ: 17.8, height: 118, mirror: false, pose: "deep", radius: 1.32, catchMaxHeight: 6.9 },
-  { id: "right-front", label: "Right front-wall fielder", x: 11.2, z: 17.8, homeX: 11.2, homeZ: 17.8, height: 118, mirror: true, pose: "deep", radius: 1.32, catchMaxHeight: 6.9 },
-  { id: "leg-side", label: "Leg-side wall fielder", x: -9.8, z: 3.2, homeX: -9.8, homeZ: 3.2, height: 78, mirror: false, pose: "side", radius: 1.18, catchMaxHeight: 3.25 },
-  { id: "off-side", label: "Off-side wall fielder", x: 9.8, z: 3.2, homeX: 9.8, homeZ: 3.2, height: 78, mirror: true, pose: "side", radius: 1.18, catchMaxHeight: 3.25 }
+  { id: "left-front", label: "Left front-wall fielder", x: -11.2, z: 17.8, homeX: -11.2, homeZ: 17.8, height: 118, mirror: false, pose: "deep", radius: 1.32, catchMinHeight: 1.5, catchMaxHeight: 6.9, action: "ready", speed: 0 },
+  { id: "right-front", label: "Right front-wall fielder", x: 11.2, z: 17.8, homeX: 11.2, homeZ: 17.8, height: 118, mirror: true, pose: "deep", radius: 1.32, catchMinHeight: 1.5, catchMaxHeight: 6.9, action: "ready", speed: 0 },
+  { id: "leg-side", label: "Leg-side wall fielder", x: -9.8, z: 3.2, homeX: -9.8, homeZ: 3.2, height: 78, mirror: false, pose: "side", radius: 1.18, catchMinHeight: 1.05, catchMaxHeight: 3.25, action: "ready", speed: 0 },
+  { id: "off-side", label: "Off-side wall fielder", x: 9.8, z: 3.2, homeX: 9.8, homeZ: 3.2, height: 78, mirror: true, pose: "side", radius: 1.18, catchMinHeight: 1.05, catchMaxHeight: 3.25, action: "ready", speed: 0 }
 ];
+// Once he has released the underarm delivery, the bowler becomes the fifth active fielder.
+const bowlerFielder = {
+  id: "bowler",
+  label: "Bowler",
+  x: 2.05,
+  z: bowlingPoppingCreaseZ,
+  homeX: 2.05,
+  homeZ: bowlingPoppingCreaseZ,
+  height: 76,
+  mirror: false,
+  pose: "bowler",
+  radius: 1.08,
+  catchMinHeight: 1.05,
+  catchMaxHeight: 3.55,
+  action: "ready",
+  speed: 0
+};
+const fieldingActors = [...fielders, bowlerFielder];
 // Ball is reduced again for the compact underarm court, both visually and physically.
 const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.0672 };
 const delivery = { phase: "held", nextAt: 0, windupAt: 0, releasedAt: 0, bounced: false };
@@ -136,6 +169,7 @@ let shotWasLofted = false;
 let shotHasBounced = false;
 let shotHasTouchedRoof = false;
 let shotHasTouchedRearWall = false;
+let fieldingPlay = null;
 let resetTime = 0;
 let lastFrame = performance.now();
 // The backlift begins with the player's finger movement; impact begins on release.
@@ -470,6 +504,12 @@ function getMotionSprite(index) {
 
 function drawBowler() {
   if (!bowlerSpriteReady) return;
+  // After delivery, the bowler is the fifth fielding actor. Draw his action pose from
+  // the same world coordinate used by the interception logic rather than leaving him frozen.
+  if (["shot", "fielderCaught", "fielderStopped", "dead"].includes(delivery.phase)) {
+    drawFielder(bowlerFielder, getBowlerFieldSprite());
+    return;
+  }
   // In this wicketkeeper-view layout, over the wicket is the screen-right side of the far stumps.
   // He remains beyond the bowling crease, facing Lohit, with no run-up.
   // The lower screen-right shoe is his forward left foot: place it directly on the popping crease.
@@ -492,18 +532,26 @@ function drawBowler() {
 }
 
 function drawFielders() {
-  // Two deep fielders protect the front wall. The side-wall pair use a separate front
-  // three-quarter pose, so their chest, feet, and eyes all face Lohit.
-  if (fielderSpriteReady) {
-    fielders
-      .filter((fielder) => fielder.pose === "deep")
-      .forEach((fielder) => drawFielder(fielder, fielderSpriteClean || fielderSprite));
-  }
-  if (inwardFielderSpriteReady) {
-    fielders
-      .filter((fielder) => fielder.pose === "side")
-      .forEach((fielder) => drawFielder(fielder, inwardFielderSpriteClean || inwardFielderSprite));
-  }
+  fielders.forEach((fielder) => drawFielder(fielder, getFielderSprite(fielder)));
+}
+
+function spriteIsReady(sprite) {
+  return sprite && sprite.complete && sprite.naturalWidth > 0;
+}
+
+function getFielderSprite(fielder) {
+  if (fielder.action === "shuffle" && spriteIsReady(fielderShuffleSprite)) return fielderShuffleSprite;
+  if (fielder.action === "stop" && spriteIsReady(fielderStopSprite)) return fielderStopSprite;
+  if (fielder.action === "catch" && spriteIsReady(fielderCatchSprite)) return fielderCatchSprite;
+  if (fielder.pose === "side" && inwardFielderSpriteReady) return inwardFielderSpriteClean || inwardFielderSprite;
+  return fielderSpriteClean || fielderSprite;
+}
+
+function getBowlerFieldSprite() {
+  if (bowlerFielder.action === "stop" && spriteIsReady(bowlerStopSprite)) return bowlerStopSprite;
+  if (bowlerFielder.action === "catch" && spriteIsReady(bowlerCatchSprite)) return bowlerCatchSprite;
+  if (bowlerFielder.action === "shuffle" && spriteIsReady(fielderShuffleSprite)) return fielderShuffleSprite;
+  return bowlerReleaseSpriteClean || bowlerReleaseSprite || bowlerSpriteClean || bowlerSprite;
 }
 
 function drawFielder(fielder, image) {
@@ -728,51 +776,132 @@ function drawBall() {
 }
 
 function updateFielders(dt) {
-  // On a settled catch or stop, keep the successful fielder at the ball so the outcome
-  // remains visually readable. In all other phases, fielders recover to their marks.
+  // On a settled catch or stop, keep the successful player at the ball so the outcome
+  // remains visually readable. In all other phases, players recover to their marks.
   if (delivery.phase === "fielderCaught" || delivery.phase === "fielderStopped") return;
+  if (scoredThisBall || pendingBallResult) {
+    fieldingPlay = null;
+    fieldingActors.forEach((actor) => {
+      actor.action = "ready";
+      actor.speed = 0;
+    });
+  }
 
-  const chasingFielder = getChasingFielder();
-  fielders.forEach((fielder) => {
-    let targetX = fielder.homeX;
-    let targetZ = fielder.homeZ;
-    if (fielder === chasingFielder) {
-      const fromHomeX = ball.x - fielder.homeX;
-      const fromHomeZ = ball.z - fielder.homeZ;
-      const fromHomeDistance = Math.hypot(fromHomeX, fromHomeZ) || 1;
-      const allowedTravel = Math.min(fielderMoveLimit, fromHomeDistance);
-      targetX = fielder.homeX + fromHomeX / fromHomeDistance * allowedTravel;
-      targetZ = fielder.homeZ + fromHomeZ / fromHomeDistance * allowedTravel;
-    }
+  fieldingActors.forEach((actor) => {
+    const selected = fieldingPlay?.actor === actor;
+    const target = selected ? fieldingPlay.target : { x: actor.homeX, z: actor.homeZ };
+    moveFieldingActor(actor, target, dt);
 
-    const dx = targetX - fielder.x;
-    const dz = targetZ - fielder.z;
-    const distance = Math.hypot(dx, dz);
-    const step = Math.min(distance, fielderMoveSpeed * dt);
-    if (distance > 0.001) {
-      fielder.x += dx / distance * step;
-      fielder.z += dz / distance * step;
-    }
+    if (!selected) return;
+    const closeToBall = Math.hypot(ball.x - actor.x, ball.z - actor.z) <= actor.radius + 0.72;
+    actor.action = closeToBall
+      ? fieldingPlay.kind === "catch" ? "catch" : "stop"
+      : "shuffle";
   });
 }
 
-function getChasingFielder() {
-  if (delivery.phase !== "shot" || scoredThisBall || pendingBallResult) return null;
+function moveFieldingActor(actor, target, dt) {
+  const dx = target.x - actor.x;
+  const dz = target.z - actor.z;
+  const distance = Math.hypot(dx, dz);
+  const brakingDistance = actor.speed * actor.speed / (2 * fielderDeceleration);
+  const targetSpeed = distance <= brakingDistance + 0.04 ? 0 : fielderMoveSpeed;
+  const rate = targetSpeed > actor.speed ? fielderAcceleration : fielderDeceleration;
+  actor.speed = Math.max(0, Math.min(fielderMoveSpeed, actor.speed + Math.sign(targetSpeed - actor.speed) * rate * dt));
+  const step = Math.min(distance, actor.speed * dt);
+  if (distance > 0.001 && step > 0) {
+    actor.x += dx / distance * step;
+    actor.z += dz / distance * step;
+  }
+  if (distance <= 0.04) actor.speed = 0;
+  if (actor.action !== "catch" && actor.action !== "stop") actor.action = distance > 0.08 ? "shuffle" : "ready";
+}
 
-  return fielders
-    .map((fielder) => ({
-      fielder,
-      homeDistance: Math.hypot(ball.x - fielder.homeX, ball.z - fielder.homeZ)
-    }))
-    .filter(({ fielder, homeDistance }) => homeDistance <= fielder.radius + fielderMoveLimit + fielderActivationPadding)
-    .sort((a, b) => a.homeDistance - b.homeDistance)[0]?.fielder || null;
+function predictFieldingPlay() {
+  const simulation = {
+    x: ball.x,
+    y: ball.y,
+    z: ball.z,
+    vx: ball.vx,
+    vy: ball.vy,
+    vz: ball.vz,
+    bounced: false,
+    touchedRoof: false
+  };
+  const sampleStep = 0.04;
+  for (let elapsed = sampleStep; elapsed <= 2.4; elapsed += sampleStep) {
+    simulation.vy -= 9.8 * sampleStep;
+    simulation.x += simulation.vx * sampleStep;
+    simulation.y += simulation.vy * sampleStep;
+    simulation.z += simulation.vz * sampleStep;
+    if (simulation.y <= ball.radius) {
+      simulation.y = ball.radius;
+      simulation.vy = Math.abs(simulation.vy) * 0.61;
+      simulation.vx *= 0.9;
+      simulation.vz *= 0.9;
+      simulation.bounced = true;
+    }
+    if (simulation.y >= court.ceiling - ball.radius) {
+      simulation.y = court.ceiling - ball.radius;
+      simulation.vy = -Math.abs(simulation.vy) * 0.72;
+      simulation.touchedRoof = true;
+    }
+    // A scoring wall ends the prediction: fielders may not claim a ball after score first.
+    if (Math.abs(simulation.x) >= court.halfWidth - ball.radius || simulation.z >= court.farZ - ball.radius || simulation.z <= court.nearZ + ball.radius) {
+      break;
+    }
+
+    const candidate = fieldingActors
+      .map((actor) => {
+        const distanceFromHome = Math.hypot(simulation.x - actor.homeX, simulation.z - actor.homeZ);
+        const moveNeeded = Math.max(0, distanceFromHome - actor.radius);
+        const canReach = moveNeeded <= fielderMoveLimit && estimateFielderMoveTime(moveNeeded) <= elapsed;
+        const canCatch = !simulation.bounced
+          && !simulation.touchedRoof
+          && simulation.y >= actor.catchMinHeight
+          && simulation.y <= actor.catchMaxHeight;
+        const canStop = simulation.bounced || simulation.y <= actor.catchMinHeight;
+        const kind = canCatch ? "catch" : canStop ? "stop" : null;
+        return canReach && kind ? { actor, kind, time: elapsed, x: simulation.x, z: simulation.z, y: simulation.y, distanceFromHome } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.distanceFromHome - b.distanceFromHome)[0];
+
+    if (candidate) {
+      const target = getReachableFieldingTarget(candidate.actor, candidate.x, candidate.z);
+      console.debug(`[Fielding V2] ${candidate.actor.label} selected for ${candidate.kind} at ${candidate.time.toFixed(2)}s.`);
+      return { ...candidate, target };
+    }
+  }
+  console.debug("[Fielding V2] No reachable player selected; ball continues to the wall.");
+  return null;
+}
+
+function estimateFielderMoveTime(distance) {
+  const accelerationDistance = fielderMoveSpeed * fielderMoveSpeed / (2 * fielderAcceleration);
+  if (distance <= accelerationDistance) return Math.sqrt(2 * distance / fielderAcceleration);
+  return fielderMoveSpeed / fielderAcceleration + (distance - accelerationDistance) / fielderMoveSpeed;
+}
+
+function getReachableFieldingTarget(actor, ballX, ballZ) {
+  const dx = ballX - actor.homeX;
+  const dz = ballZ - actor.homeZ;
+  const distance = Math.hypot(dx, dz) || 1;
+  const travel = Math.min(fielderMoveLimit, distance);
+  return {
+    x: actor.homeX + dx / distance * travel,
+    z: actor.homeZ + dz / distance * travel
+  };
 }
 
 function resetFielderPositions() {
-  fielders.forEach((fielder) => {
-    fielder.x = fielder.homeX;
-    fielder.z = fielder.homeZ;
+  fieldingActors.forEach((actor) => {
+    actor.x = actor.homeX;
+    actor.z = actor.homeZ;
+    actor.speed = 0;
+    actor.action = "ready";
   });
+  fieldingPlay = null;
 }
 
 function update(dt) {
@@ -933,7 +1062,7 @@ function updateShot(dt) {
   if (ball.y + ball.radius >= court.ceiling) {
     ball.y = court.ceiling - ball.radius;
     ball.vy = -Math.abs(ball.vy) * 0.72;
-    // Rebound catches are intentionally excluded from V1. A roof touch can still
+    // Roof-rebound catches are intentionally excluded from this version. A roof touch can still
     // lead to a later ground stop after the ball comes down.
     shotHasTouchedRoof = true;
   }
@@ -957,36 +1086,31 @@ function updateShot(dt) {
   if (ball.z - ball.radius <= court.nearZ) {
     ball.z = court.nearZ + ball.radius;
     ball.vz *= -0.68;
-    // Rear-wall rebound catches are deliberately deferred to Fielder Interaction V2.
+    // Rear-wall rebound catches are deliberately deferred beyond this version.
     shotHasTouchedRearWall = true;
   }
   if (performance.now() >= resetTime || ball.z < court.nearZ + 0.2) finishCurrentBall(450);
 }
 
 function resolveFielderInteraction() {
-  // A scoring wall always wins if it was reached first, and a resolved fielder event
-  // must never be replaced by another event later in the same ball.
+  // A scoring wall always wins if it was reached first, and only the player selected
+  // from the predicted path is allowed to resolve this ball.
   if (scoredThisBall || pendingBallResult) return false;
-
-  const fielder = fielders.find((candidate) => {
-    const distance = Math.hypot(ball.x - candidate.x, ball.z - candidate.z);
-    return distance <= candidate.radius;
-  });
+  const fielder = fieldingPlay?.actor;
   if (!fielder) return false;
+  const distance = Math.hypot(ball.x - fielder.x, ball.z - fielder.z);
+  if (distance > fielder.radius) return false;
 
-  const canCatch = shotWasLofted
-    && !shotHasBounced
+  const canCatch = !shotHasBounced
     && !shotHasTouchedRoof
     && !shotHasTouchedRearWall
-    && ball.y >= 0.8
+    && ball.y >= fielder.catchMinHeight
     && ball.y <= fielder.catchMaxHeight;
 
   if (canCatch) {
-    // Freeze the ball at its visible catch point. The deeper front-wall fielders can
-    // take a high overhead catch; side-wall fielders use a lower, body-height window.
-    ball.x = fielder.x;
-    ball.y = Math.max(1.2, Math.min(fielder.catchMaxHeight, ball.y));
-    ball.z = fielder.z;
+    // Preserve the actual meeting point instead of snapping the ball to a distant sprite.
+    // The selected catcher is already in a hands-up action pose at this close distance.
+    fielder.action = "catch";
     ball.vx = ball.vy = ball.vz = 0;
     delivery.phase = "fielderCaught";
     delivery.resultAt = performance.now();
@@ -1000,11 +1124,12 @@ function resolveFielderInteraction() {
     return true;
   }
 
-  const canStop = !shotWasLofted || shotHasBounced || ball.y <= 0.8;
+  const canStop = shotHasBounced || ball.y <= fielder.catchMinHeight;
   if (!canStop) return false;
 
-  // A nearby fielder can gather a grounded or previously bounced ball, but does not
-  // turn a high loft into an unrealistic catch.
+  // A stopped ball is placed at the selected player's feet only after the player has
+  // reached the same small interaction zone as the actual moving ball.
+  fielder.action = "stop";
   ball.x = fielder.x;
   ball.y = ball.radius;
   ball.z = fielder.z;
@@ -1055,6 +1180,9 @@ function launchBall(angle) {
   // A lofted shot has enough height to reach the upper scoring bands without hitting the roof.
   ball.vy = (loftSelected ? 10.2 : 5.9) * timing.power;
   ball.vz = Math.cos(angle) * shotSpeed;
+  // Pick one reachable defender from the projected path before the ball starts moving.
+  // This avoids every fielder reacting late to the same live ball.
+  fieldingPlay = predictFieldingPlay();
   delivery.phase = "shot";
   inPlay = true;
   scoredThisBall = false;
@@ -1093,6 +1221,11 @@ function resetBall(message) {
   shotHasBounced = false;
   shotHasTouchedRoof = false;
   shotHasTouchedRearWall = false;
+  fieldingPlay = null;
+  fieldingActors.forEach((actor) => {
+    actor.action = "ready";
+    actor.speed = 0;
+  });
   driveAnimation.phase = "idle";
   timingRunning = false;
   timingPosition = 0.5;
