@@ -31,6 +31,19 @@
         <button id="play-again" type="button">Play Again</button>
       </section>
 
+      <section id="bonus-reward" class="bonus-reward" aria-live="assertive" aria-hidden="true" hidden>
+        <div class="bonus-card" role="dialog" aria-modal="true" aria-labelledby="bonus-title" aria-describedby="bonus-copy">
+          <p class="eyebrow">Bonus batter</p>
+          <h1 id="bonus-title">Unlock Samrat?</h1>
+          <p id="bonus-copy">Watch an ad to bring in powerful batter Samrat.</p>
+          <p id="bonus-state" class="bonus-state" hidden></p>
+          <div class="bonus-actions">
+            <button id="watch-ad" class="watch-ad-button" type="button">Watch Ad</button>
+            <button id="skip-samrat" class="skip-bonus-button" type="button">Skip</button>
+          </div>
+        </div>
+      </section>
+
       <section class="controls" aria-label="Prototype controls">
         <p id="status" aria-live="polite">Swipe forward in the court to play a shot.</p>
         <div class="timing-panel" aria-label="Shot timing gauge">
@@ -44,6 +57,6 @@
       </section>
     </main>
     <!-- Version the game script itself so GitHub Pages/browser caches cannot retain an older build. -->
-    <script src="app.js?v=batting-lineup-v1"></script>
+    <script src="app.js?v=bonus-batter-reward-v1"></script>
   </body>
 </html>

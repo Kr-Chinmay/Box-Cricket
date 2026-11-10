@@ -113,6 +113,34 @@ button:disabled { opacity: 0.55; cursor: wait; }
 .match-result p:not(.eyebrow) { margin: 0 0 18px; color: #d7dfd2; line-height: 1.45; }
 .match-result button { width: 100%; background: #e2c653; }
 
+.bonus-reward {
+  position: fixed;
+  z-index: 6;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 9, 6, 0.68);
+  backdrop-filter: blur(5px);
+}
+.bonus-card {
+  width: min(100%, 380px);
+  padding: 25px 22px 22px;
+  border: 1px solid rgba(255, 188, 75, 0.9);
+  border-radius: 20px;
+  background: linear-gradient(150deg, #173b67, #0a1828 60%, #0c2118);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.78), inset 0 1px 0 rgba(255,255,255,.12);
+  text-align: center;
+}
+.bonus-card h1 { margin: 7px 0 9px; color: #ffd176; font-size: 1.85rem; }
+.bonus-card p:not(.eyebrow) { margin: 0; color: #e3eaf4; line-height: 1.45; }
+.bonus-state { min-height: 1.45em; margin-top: 13px !important; color: #7ddc93 !important; font-weight: 800; }
+.bonus-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+.bonus-actions button { min-height: 54px; }
+.watch-ad-button { background: #e07525; color: #1d0e05; box-shadow: inset 0 0 0 2px #ffd176; }
+.skip-bonus-button { border: 1px solid rgba(220, 230, 244, .44); background: #1a3152; color: #eef5ff; }
+.bonus-actions button:disabled { opacity: .72; }
+
 @media (min-width: 600px) {
   .game-shell { min-height: 0; }
   canvas { height: min(74vh, 760px); }

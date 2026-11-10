@@ -17,6 +17,12 @@ const resultKickerElement = document.getElementById("result-kicker");
 const resultTitleElement = document.getElementById("result-title");
 const resultCopyElement = document.getElementById("result-copy");
 const playAgainButton = document.getElementById("play-again");
+const bonusRewardElement = document.getElementById("bonus-reward");
+const bonusTitleElement = document.getElementById("bonus-title");
+const bonusCopyElement = document.getElementById("bonus-copy");
+const bonusStateElement = document.getElementById("bonus-state");
+const watchAdButton = document.getElementById("watch-ad");
+const skipSamratButton = document.getElementById("skip-samrat");
 // Freeze Lohit on one correct, compact ready stance before introducing any further
 // movement. A bat swing will be re-added only after this pose is approved in-game.
 const lohitStanceSprite = new Image();
@@ -87,6 +93,11 @@ const batters = [
     motion: ["yashpreet-batter-load-v1.png", "yashpreet-batter-contact-v1.png", "yashpreet-batter-followthrough-v1.png"]
   })
 ];
+
+// Samrat is intentionally not part of the normal batting order. The reward decision
+// selects one of these two lineups once, immediately after Lohit's dismissal.
+const ordinaryLineup = [batters[0], batters[2], batters[3]];
+const bonusLineup = [batters[0], batters[1], batters[2], batters[3]];
 
 const bowlerSprite = new Image();
 let bowlerSpriteReady = false;
@@ -200,7 +211,7 @@ const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.
 const delivery = { phase: "held", nextAt: 0, windupAt: 0, releasedAt: 0, bounced: false };
 const deliveryDelayMs = 2200;
 const deliveryWindupMs = 750;
-const matchConfig = { target: 40, totalBalls: 24, maxWickets: batters.length };
+const matchConfig = { target: 40, totalBalls: 24, maxWickets: ordinaryLineup.length };
 // Open with the shot guide 30° toward leg side (screen-left), clear of the bowler and front-wall labels.
 const defaultShotAngle = -30 * Math.PI / 180;
 let shotAngle = defaultShotAngle;
@@ -212,8 +223,12 @@ let timingStartedAt = performance.now();
 let score = 0;
 let wickets = 0;
 let ballsBowled = 0;
+let activeLineup = ordinaryLineup;
 let activeBatterIndex = 0;
 let batterChange = null;
+let bonusDecision = "pending";
+let pendingBonusWicket = null;
+let rewardResolveAt = 0;
 let matchState = "playing";
 let pendingBallResult = null;
 let inPlay = false;
@@ -238,7 +253,7 @@ function formatOvers(ballCount) {
 }
 
 function activeBatter() {
-  return batters[activeBatterIndex];
+  return activeLineup[activeBatterIndex];
 }
 
 function isLoaded(image) {
@@ -299,12 +314,16 @@ function completeBall() {
     endMatch("win");
     return;
   }
-  if (wickets >= matchConfig.maxWickets) {
-    endMatch("wicket", result);
-    return;
-  }
   if (ballsBowled >= matchConfig.totalBalls) {
     endMatch("overs");
+    return;
+  }
+  if (shouldOfferSamrat(result)) {
+    showSamratRewardOffer(result);
+    return;
+  }
+  if (wickets >= matchConfig.maxWickets) {
+    endMatch("wicket", result);
     return;
   }
   if (result.wicket) {
@@ -315,10 +334,77 @@ function completeBall() {
   resetBall(`Ball ${ballsBowled + 1} of ${matchConfig.totalBalls} — choose Loft if you want a lofted shot.`);
 }
 
+function shouldOfferSamrat(result) {
+  return result.wicket
+    && bonusDecision === "pending"
+    && activeBatter()?.id === "lohit"
+    && wickets === 1;
+}
+
+function showSamratRewardOffer(result) {
+  pendingBonusWicket = result;
+  bonusDecision = "offered";
+  delivery.phase = "bonusOffer";
+  inPlay = false;
+  timingRunning = false;
+  swipeStart = null;
+  driveAnimation.phase = "idle";
+  loftButton.disabled = true;
+  bonusTitleElement.textContent = "Unlock Samrat?";
+  bonusCopyElement.textContent = "Watch an ad to bring in powerful batter Samrat.";
+  bonusStateElement.hidden = true;
+  bonusStateElement.textContent = "";
+  watchAdButton.disabled = false;
+  skipSamratButton.disabled = false;
+  bonusRewardElement.hidden = false;
+  bonusRewardElement.setAttribute("aria-hidden", "false");
+  statusElement.textContent = "Lohit is out — choose whether to unlock Samrat.";
+}
+
+function hideSamratRewardOffer() {
+  bonusRewardElement.hidden = true;
+  bonusRewardElement.setAttribute("aria-hidden", "true");
+}
+
+function applyBonusLineupChoice(choice) {
+  if (bonusDecision !== "offered" || !pendingBonusWicket) return;
+  const unlockSamrat = choice === "unlocked";
+  bonusDecision = unlockSamrat ? "unlocked" : "skipped";
+  activeLineup = unlockSamrat ? bonusLineup : ordinaryLineup;
+  matchConfig.maxWickets = activeLineup.length;
+
+  if (!unlockSamrat) {
+    hideSamratRewardOffer();
+    const wicket = pendingBonusWicket;
+    pendingBonusWicket = null;
+    beginNextBatterTransition(wicket);
+    return;
+  }
+
+  // This is deliberately only a one-second visual stand-in for a future rewarded-ad SDK.
+  watchAdButton.disabled = true;
+  skipSamratButton.disabled = true;
+  bonusTitleElement.textContent = "Reward unlocked!";
+  bonusCopyElement.textContent = "Samrat is coming in.";
+  bonusStateElement.hidden = false;
+  bonusStateElement.textContent = "Preparing Samrat…";
+  delivery.phase = "rewardMock";
+  rewardResolveAt = performance.now() + 1000;
+  statusElement.textContent = "Reward unlocked! Samrat is coming in.";
+}
+
+function updateBonusRewardFlow() {
+  if (delivery.phase !== "rewardMock" || performance.now() < rewardResolveAt) return;
+  hideSamratRewardOffer();
+  const wicket = pendingBonusWicket;
+  pendingBonusWicket = null;
+  beginNextBatterTransition(wicket);
+}
+
 function beginNextBatterTransition(result) {
   const dismissed = activeBatter();
   const nextBatterIndex = activeBatterIndex + 1;
-  const nextBatter = batters[nextBatterIndex];
+  const nextBatter = activeLineup[nextBatterIndex];
   if (!nextBatter) {
     endMatch("wicket", result);
     return;
@@ -398,8 +484,13 @@ function startNewMatch() {
   score = 0;
   wickets = 0;
   ballsBowled = 0;
+  activeLineup = ordinaryLineup;
   activeBatterIndex = 0;
   batterChange = null;
+  bonusDecision = "pending";
+  pendingBonusWicket = null;
+  rewardResolveAt = 0;
+  matchConfig.maxWickets = ordinaryLineup.length;
   matchState = "playing";
   pendingBallResult = null;
   scoredThisBall = false;
@@ -410,6 +501,7 @@ function startNewMatch() {
   loftButton.textContent = "Loft: Off";
   matchResultElement.hidden = true;
   matchResultElement.setAttribute("aria-hidden", "true");
+  hideSamratRewardOffer();
   resetFielderPositions();
   updateHud();
   setLastBall("—");
@@ -890,7 +982,7 @@ function drawWallLabel(text, x, y, z, color, fontSize) {
 function drawBall() {
   // The held and wind-up sprite frames already contain the ball in the bowler's hand.
   // Draw the canvas ball only after his palm opens, so it visibly leaves that hand.
-  if (["held", "windup", "dead", "batterChange", "complete"].includes(delivery.phase)) return;
+  if (["held", "windup", "dead", "bonusOffer", "rewardMock", "batterChange", "complete"].includes(delivery.phase)) return;
   const p = project(ball.x, ball.y, ball.z);
   const radius = Math.max(1.4, 5.46 * p.scale);
   const glow = ctx.createRadialGradient(p.x - radius * 0.25, p.y - radius * 0.3, 1, p.x, p.y, radius * 1.25);
@@ -1034,6 +1126,11 @@ function resetFielderPositions() {
 function update(dt) {
   if (!isMatchActive()) return;
   updateFielders(dt);
+  if (delivery.phase === "bonusOffer") return;
+  if (delivery.phase === "rewardMock") {
+    updateBonusRewardFlow();
+    return;
+  }
   if (delivery.phase === "batterChange") {
     updateBatterChange();
     return;
@@ -1456,6 +1553,8 @@ canvas.addEventListener("pointercancel", () => {
 });
 loftButton.addEventListener("click", toggleLoft);
 playAgainButton.addEventListener("click", startNewMatch);
+watchAdButton.addEventListener("click", () => applyBonusLineupChoice("unlocked"));
+skipSamratButton.addEventListener("click", () => applyBonusLineupChoice("skipped"));
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 startNewMatch();
