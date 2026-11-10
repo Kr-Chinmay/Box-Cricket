@@ -97,13 +97,19 @@ const frontWallScoreDivider = court.ceiling / 2;
 const battingStumpsZ = -7.5;
 const bowlingStumpsZ = 3.0;
 const bowlingPoppingCreaseZ = bowlingStumpsZ - 1.25;
+// A fielder may leave his marked position by at most 5% of the court's full width.
+// In this arena that is roughly two world units: visible movement, but never a dive
+// or an unrealistic run across half the court.
+const fielderMoveLimit = court.halfWidth * 2 * 0.05;
+const fielderMoveSpeed = 5.4;
+const fielderActivationPadding = 4.4;
 // These same world coordinates drive both the drawn fielders and their deterministic
 // interception zones, so the ball can only be caught or stopped where a player is visible.
 const fielders = [
-  { id: "left-front", label: "Left front-wall fielder", x: -11.2, z: 17.8, height: 118, mirror: false, pose: "deep", radius: 1.32, catchMaxHeight: 6.9 },
-  { id: "right-front", label: "Right front-wall fielder", x: 11.2, z: 17.8, height: 118, mirror: true, pose: "deep", radius: 1.32, catchMaxHeight: 6.9 },
-  { id: "leg-side", label: "Leg-side wall fielder", x: -9.8, z: 3.2, height: 78, mirror: false, pose: "side", radius: 1.18, catchMaxHeight: 3.25 },
-  { id: "off-side", label: "Off-side wall fielder", x: 9.8, z: 3.2, height: 78, mirror: true, pose: "side", radius: 1.18, catchMaxHeight: 3.25 }
+  { id: "left-front", label: "Left front-wall fielder", x: -11.2, z: 17.8, homeX: -11.2, homeZ: 17.8, height: 118, mirror: false, pose: "deep", radius: 1.32, catchMaxHeight: 6.9 },
+  { id: "right-front", label: "Right front-wall fielder", x: 11.2, z: 17.8, homeX: 11.2, homeZ: 17.8, height: 118, mirror: true, pose: "deep", radius: 1.32, catchMaxHeight: 6.9 },
+  { id: "leg-side", label: "Leg-side wall fielder", x: -9.8, z: 3.2, homeX: -9.8, homeZ: 3.2, height: 78, mirror: false, pose: "side", radius: 1.18, catchMaxHeight: 3.25 },
+  { id: "off-side", label: "Off-side wall fielder", x: 9.8, z: 3.2, homeX: 9.8, homeZ: 3.2, height: 78, mirror: true, pose: "side", radius: 1.18, catchMaxHeight: 3.25 }
 ];
 // Ball is reduced again for the compact underarm court, both visually and physically.
 const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.0672 };
@@ -251,6 +257,7 @@ function startNewMatch() {
   loftButton.textContent = "Loft: Off";
   matchResultElement.hidden = true;
   matchResultElement.setAttribute("aria-hidden", "true");
+  resetFielderPositions();
   updateHud();
   setLastBall("—");
   resetBall("Ball 1 of 24 — choose Loft if you want a lofted shot.");
@@ -720,8 +727,57 @@ function drawBall() {
   ctx.beginPath(); ctx.arc(p.x, p.y, radius * 0.72, -0.8, 0.75); ctx.stroke();
 }
 
+function updateFielders(dt) {
+  // On a settled catch or stop, keep the successful fielder at the ball so the outcome
+  // remains visually readable. In all other phases, fielders recover to their marks.
+  if (delivery.phase === "fielderCaught" || delivery.phase === "fielderStopped") return;
+
+  const chasingFielder = getChasingFielder();
+  fielders.forEach((fielder) => {
+    let targetX = fielder.homeX;
+    let targetZ = fielder.homeZ;
+    if (fielder === chasingFielder) {
+      const fromHomeX = ball.x - fielder.homeX;
+      const fromHomeZ = ball.z - fielder.homeZ;
+      const fromHomeDistance = Math.hypot(fromHomeX, fromHomeZ) || 1;
+      const allowedTravel = Math.min(fielderMoveLimit, fromHomeDistance);
+      targetX = fielder.homeX + fromHomeX / fromHomeDistance * allowedTravel;
+      targetZ = fielder.homeZ + fromHomeZ / fromHomeDistance * allowedTravel;
+    }
+
+    const dx = targetX - fielder.x;
+    const dz = targetZ - fielder.z;
+    const distance = Math.hypot(dx, dz);
+    const step = Math.min(distance, fielderMoveSpeed * dt);
+    if (distance > 0.001) {
+      fielder.x += dx / distance * step;
+      fielder.z += dz / distance * step;
+    }
+  });
+}
+
+function getChasingFielder() {
+  if (delivery.phase !== "shot" || scoredThisBall || pendingBallResult) return null;
+
+  return fielders
+    .map((fielder) => ({
+      fielder,
+      homeDistance: Math.hypot(ball.x - fielder.homeX, ball.z - fielder.homeZ)
+    }))
+    .filter(({ fielder, homeDistance }) => homeDistance <= fielder.radius + fielderMoveLimit + fielderActivationPadding)
+    .sort((a, b) => a.homeDistance - b.homeDistance)[0]?.fielder || null;
+}
+
+function resetFielderPositions() {
+  fielders.forEach((fielder) => {
+    fielder.x = fielder.homeX;
+    fielder.z = fielder.homeZ;
+  });
+}
+
 function update(dt) {
   if (!isMatchActive()) return;
+  updateFielders(dt);
   if (delivery.phase === "fielderCaught" || delivery.phase === "fielderStopped") {
     updateFielderResolution();
     return;
@@ -947,7 +1003,7 @@ function resolveFielderInteraction() {
   const canStop = !shotWasLofted || shotHasBounced || ball.y <= 0.8;
   if (!canStop) return false;
 
-  // A static fielder can gather a grounded or previously bounced ball, but does not
+  // A nearby fielder can gather a grounded or previously bounced ball, but does not
   // turn a high loft into an unrealistic catch.
   ball.x = fielder.x;
   ball.y = ball.radius;
