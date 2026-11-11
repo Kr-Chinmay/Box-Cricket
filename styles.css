@@ -123,7 +123,7 @@ button:disabled { opacity: 0.55; cursor: wait; }
   background: rgba(2, 9, 6, 0.68);
   backdrop-filter: blur(5px);
 }
-.bonus-reward[hidden] { display: none; }
+.bonus-reward[hidden] { display: none !important; }
 .bonus-card {
   width: min(100%, 380px);
   padding: 25px 22px 22px;

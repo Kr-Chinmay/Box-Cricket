@@ -23,6 +23,10 @@ const bonusCopyElement = document.getElementById("bonus-copy");
 const bonusStateElement = document.getElementById("bonus-state");
 const watchAdButton = document.getElementById("watch-ad");
 const skipSamratButton = document.getElementById("skip-samrat");
+// Guard the first paint as well as later state changes: this overlay may only be
+// revealed after Lohit's first completed dismissal.
+bonusRewardElement.hidden = true;
+bonusRewardElement.setAttribute("aria-hidden", "true");
 // Freeze Lohit on one correct, compact ready stance before introducing any further
 // movement. A bat swing will be re-added only after this pose is approved in-game.
 const lohitStanceSprite = new Image();
