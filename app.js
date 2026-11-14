@@ -50,10 +50,10 @@ function createAudioManager() {
   const voiceCalls = {
     // The voice clips intentionally live at the repository root. This matches the
     // files already on GitHub and prevents a missing-folder request on Pages.
-    four: { source: "four.wav", fallbackSeconds: 0.62 },
-    six: { source: "six.wav", fallbackSeconds: 0.68 },
-    caught: { source: "caught.wav", fallbackSeconds: 0.8 },
-    bowled: { source: "bowled.wav", fallbackSeconds: 0.9 }
+    four: { source: "four.wav", fallbackSeconds: 1.0 },
+    six: { source: "six.wav", fallbackSeconds: 1.1 },
+    caught: { source: "caught.wav", fallbackSeconds: 1.0 },
+    bowled: { source: "bowled.wav", fallbackSeconds: 0.95 }
   };
   let soundEnabled = true;
   let activeEffects = 0;
@@ -96,12 +96,12 @@ function createAudioManager() {
     return buffer;
   }
 
-  function duckAmbience(seconds = 0.5) {
+  function duckAmbience(seconds = 0.5, duckLevel = 0.008) {
     if (!ambienceGain || !context) return;
     const now = context.currentTime;
     ambienceGain.gain.cancelScheduledValues(now);
     ambienceGain.gain.setValueAtTime(Math.max(0.012, ambienceGain.gain.value), now);
-    ambienceGain.gain.linearRampToValueAtTime(0.008, now + 0.035);
+    ambienceGain.gain.linearRampToValueAtTime(duckLevel, now + 0.035);
     ambienceGain.gain.linearRampToValueAtTime(0.032, now + seconds);
   }
 
@@ -219,17 +219,30 @@ function createAudioManager() {
 
     stopVoiceCall();
     const source = context.createBufferSource();
+    const presence = context.createBiquadFilter();
+    const compressor = context.createDynamicsCompressor();
     const volume = context.createGain();
     source.buffer = buffer;
-    volume.gain.value = 0.68;
-    source.connect(volume).connect(masterGain);
+    // Voice is intentionally the clearest, loudest part of a key event: a small
+    // presence lift and compressor cut through the indoor ambience on phone speakers.
+    presence.type = "peaking";
+    presence.frequency.value = 2100;
+    presence.Q.value = 0.9;
+    presence.gain.value = 5.5;
+    compressor.threshold.value = -27;
+    compressor.knee.value = 12;
+    compressor.ratio.value = 9;
+    compressor.attack.value = 0.004;
+    compressor.release.value = 0.16;
+    volume.gain.value = 1.25;
+    source.connect(presence).connect(compressor).connect(volume).connect(masterGain);
     source.onended = () => {
       if (activeVoiceSource === source) activeVoiceSource = null;
     };
     activeVoiceSource = source;
     voiceCallLockedForBall = true;
     voicePlaybackEndsAt = performance.now() + Math.max(call.fallbackSeconds, buffer.duration) * 1000;
-    duckAmbience(Math.max(call.fallbackSeconds, buffer.duration) + 0.2);
+    duckAmbience(Math.max(call.fallbackSeconds, buffer.duration) + 0.28, 0.003);
     source.start();
     return true;
   }
