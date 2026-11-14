@@ -237,6 +237,15 @@ let loftSelected = false;
 let timingPosition = 0.5;
 let timingRunning = true;
 let timingStartedAt = performance.now();
+let timingProfile = null;
+const timingProfileConfig = {
+  startMinimum: 0.2,
+  startMaximum: 0.8,
+  minAngularVelocity: 0.0011,
+  maxAngularVelocity: 0.00315,
+  perfectDelayAfterPlayableMs: 250,
+  safetyBeforeStumpsMs: 150
+};
 let score = 0;
 let wickets = 0;
 let ballsBowled = 0;
@@ -1334,8 +1343,9 @@ function releaseDelivery(now) {
   delivery.releasedAt = now;
   timingRunning = true;
   timingStartedAt = now;
-  timingPosition = 0.5;
-  timingMarker.style.left = "50%";
+  timingProfile = createTimingProfile();
+  timingPosition = timingProfile.startPosition;
+  timingMarker.style.left = `${timingPosition * 100}%`;
   statusElement.textContent = "Ball released — swipe as it reaches Lohit.";
 }
 
@@ -1526,11 +1536,120 @@ function scoreRuns(runs) {
   resetTime = performance.now() + 1450;
 }
 
+function estimateIncomingPlayableWindow() {
+  // Simulate the same single-bounce underarm path used in updateDelivery. This keeps the
+  // timing model attached to the actual ball rather than to a hard-coded stopwatch.
+  const simulation = {
+    y: ball.y,
+    z: ball.z,
+    vy: ball.vy,
+    vz: ball.vz,
+    bounced: false
+  };
+  const step = 0.005;
+  let playableStartMs = null;
+  let playableEndMs = null;
+
+  for (let elapsed = step; elapsed <= 3; elapsed += step) {
+    if (!simulation.bounced) simulation.vy -= 9.8 * step;
+    if (!simulation.bounced) simulation.y += simulation.vy * step;
+    simulation.z += simulation.vz * step;
+
+    if (!simulation.bounced && simulation.y - ball.radius <= 0) {
+      simulation.y = ball.radius;
+      simulation.vy = 0;
+      simulation.vz *= 0.96;
+      simulation.bounced = true;
+    }
+
+    const isPlayable = simulation.z <= battingStumpsZ + 4.2
+      && simulation.z >= battingStumpsZ + 0.18;
+    if (isPlayable && playableStartMs === null) playableStartMs = elapsed * 1000;
+    if (playableStartMs !== null && simulation.z < battingStumpsZ + 0.18) {
+      playableEndMs = elapsed * 1000;
+      break;
+    }
+  }
+
+  // Safe values keep the timing gauge playable even if we later alter the delivery
+  // and forget to update this helper at the same time.
+  return {
+    playableStartMs: playableStartMs ?? 680,
+    playableEndMs: playableEndMs ?? 1560
+  };
+}
+
+function phaseForTimingStart(position, direction) {
+  const arc = Math.asin(Math.max(-1, Math.min(1, position * 2 - 1)));
+  return direction > 0 ? arc : Math.PI - arc;
+}
+
+function createTimingProfile() {
+  const window = estimateIncomingPlayableWindow();
+  const earliestPerfectMs = window.playableStartMs + timingProfileConfig.perfectDelayAfterPlayableMs;
+  const latestPerfectMs = Math.max(
+    earliestPerfectMs,
+    window.playableEndMs - timingProfileConfig.safetyBeforeStumpsMs
+  );
+
+  // Select an opening position and direction first, then solve the sine sweep speed
+  // so its next centre crossing lands inside the realistic hitting window. Rejection
+  // sampling prevents an extreme marker speed from ever being chosen.
+  for (let attempt = 0; attempt < 48; attempt += 1) {
+    const startPosition = timingProfileConfig.startMinimum
+      + Math.random() * (timingProfileConfig.startMaximum - timingProfileConfig.startMinimum);
+    const direction = Math.random() < 0.5 ? -1 : 1;
+    const phase = phaseForTimingStart(startPosition, direction);
+    const targetPerfectMs = earliestPerfectMs + Math.random() * (latestPerfectMs - earliestPerfectMs);
+    const firstCrossingIndex = Math.floor(phase / Math.PI) + 1;
+
+    for (let crossingOffset = 0; crossingOffset <= 2; crossingOffset += 1) {
+      const crossingPhase = (firstCrossingIndex + crossingOffset) * Math.PI;
+      const angularVelocity = (crossingPhase - phase) / targetPerfectMs;
+      const previousCrossingMs = (crossingPhase - Math.PI - phase) / angularVelocity;
+      const hasNaturalSpeed = angularVelocity >= timingProfileConfig.minAngularVelocity
+        && angularVelocity <= timingProfileConfig.maxAngularVelocity;
+      const hasNoEarlierPlayablePerfect = previousCrossingMs < window.playableStartMs - 50;
+      if (hasNaturalSpeed && hasNoEarlierPlayablePerfect) {
+        return {
+          startPosition,
+          initialDirection: direction,
+          phase,
+          angularVelocity,
+          perfectCrossAtMs: targetPerfectMs,
+          playableStartMs: window.playableStartMs,
+          playableEndMs: window.playableEndMs
+        };
+      }
+    }
+  }
+
+  // A guaranteed fair fallback for unusual future delivery values. It still begins
+  // in the central band and reaches Perfect while the ball is playable.
+  const startPosition = 0.74;
+  const direction = 1;
+  const phase = phaseForTimingStart(startPosition, direction);
+  const targetPerfectMs = (earliestPerfectMs + latestPerfectMs) / 2;
+  const crossingPhase = (Math.floor(phase / Math.PI) + 1) * Math.PI;
+  return {
+    startPosition,
+    initialDirection: direction,
+    phase,
+    angularVelocity: (crossingPhase - phase) / targetPerfectMs,
+    perfectCrossAtMs: targetPerfectMs,
+    playableStartMs: window.playableStartMs,
+    playableEndMs: window.playableEndMs
+  };
+}
+
 function launchBall(angle) {
   if (!isBallPlayable()) {
     statusElement.textContent = "Wait for the ball to reach Lohit before playing the shot.";
     return;
   }
+  // Capture the marker on the same event that releases the swipe, not on the previous
+  // animation frame, so its displayed position and scoring result always agree.
+  updateTimingGauge(performance.now());
   const timing = getTimingResult(timingPosition);
   // Freeze the marker where the player pressed Launch so the result remains visible.
   timingRunning = false;
@@ -1571,9 +1690,11 @@ function getTimingResult(position) {
 }
 
 function updateTimingGauge(now) {
-  // A smooth left-to-right-to-left sweep gives the player a simple timing challenge.
-  if (!timingRunning) return;
-  timingPosition = (Math.sin((now - timingStartedAt) / 520) + 1) / 2;
+  // Each released ball owns a smooth sine profile. The phase is chosen at release so
+  // its Perfect crossing occurs during this specific ball's playable shot window.
+  if (!timingRunning || !timingProfile) return;
+  const elapsed = now - timingStartedAt;
+  timingPosition = (Math.sin(timingProfile.phase + elapsed * timingProfile.angularVelocity) + 1) / 2;
   timingMarker.style.left = `${timingPosition * 100}%`;
 }
 
@@ -1596,6 +1717,7 @@ function resetBall(message) {
   });
   driveAnimation.phase = "idle";
   timingRunning = false;
+  timingProfile = null;
   timingPosition = 0.5;
   timingMarker.style.left = "50%";
   loftButton.disabled = false;
