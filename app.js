@@ -48,10 +48,12 @@ function createAudioManager() {
   let voicePlaybackEndsAt = 0;
   const voiceBuffers = new Map();
   const voiceCalls = {
-    four: { source: "assets/four.wav", fallbackSeconds: 0.62 },
-    six: { source: "assets/six.wav", fallbackSeconds: 0.68 },
-    caught: { source: "assets/caught.wav", fallbackSeconds: 0.8 },
-    bowled: { source: "assets/bowled.wav", fallbackSeconds: 0.9 }
+    // The voice clips intentionally live at the repository root. This matches the
+    // files already on GitHub and prevents a missing-folder request on Pages.
+    four: { source: "four.wav", fallbackSeconds: 0.62 },
+    six: { source: "six.wav", fallbackSeconds: 0.68 },
+    caught: { source: "caught.wav", fallbackSeconds: 0.8 },
+    bowled: { source: "bowled.wav", fallbackSeconds: 0.9 }
   };
   let soundEnabled = true;
   let activeEffects = 0;
