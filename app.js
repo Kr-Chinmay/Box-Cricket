@@ -32,6 +32,212 @@ const startResumeButton = document.getElementById("start-resume");
 const openHowToPlayButton = document.getElementById("open-how-to-play");
 const howToPlayScreenElement = document.getElementById("how-to-play-screen");
 const closeHowToPlayButton = document.getElementById("close-how-to-play");
+const soundToggleButton = document.getElementById("sound-toggle");
+
+// All V1 audio is synthesized locally with the Web Audio API. This keeps the download
+// tiny and avoids copied broadcast, game, or commentary material. Voice commentary is
+// deliberately absent until we have original recorded clips to use.
+function createAudioManager() {
+  let context = null;
+  let masterGain = null;
+  let ambienceSource = null;
+  let ambienceGain = null;
+  let soundEnabled = true;
+  let activeEffects = 0;
+  const maximumEffects = 3;
+
+  function updateToggle() {
+    soundToggleButton.textContent = soundEnabled ? "Sound: On" : "Sound: Off";
+    soundToggleButton.setAttribute("aria-pressed", String(soundEnabled));
+    soundToggleButton.setAttribute("aria-label", soundEnabled ? "Turn sound off" : "Turn sound on");
+  }
+
+  function ensureContextFromGesture() {
+    if (!soundEnabled) return false;
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextConstructor) return false;
+    if (!context) {
+      context = new AudioContextConstructor();
+      masterGain = context.createGain();
+      masterGain.gain.value = 0.72;
+      masterGain.connect(context.destination);
+    }
+    if (context.state === "suspended") context.resume().catch(() => {});
+    return true;
+  }
+
+  function canPlay() {
+    return soundEnabled && Boolean(context && masterGain);
+  }
+
+  function makeNoiseBuffer(seconds) {
+    const length = Math.max(1, Math.floor(context.sampleRate * seconds));
+    const buffer = context.createBuffer(1, length, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    let previous = 0;
+    for (let index = 0; index < length; index += 1) {
+      // A gently correlated signal sounds softer and more indoor than raw hiss.
+      previous = previous * 0.78 + (Math.random() * 2 - 1) * 0.22;
+      data[index] = previous;
+    }
+    return buffer;
+  }
+
+  function duckAmbience(seconds = 0.5) {
+    if (!ambienceGain || !context) return;
+    const now = context.currentTime;
+    ambienceGain.gain.cancelScheduledValues(now);
+    ambienceGain.gain.setValueAtTime(Math.max(0.012, ambienceGain.gain.value), now);
+    ambienceGain.gain.linearRampToValueAtTime(0.008, now + 0.035);
+    ambienceGain.gain.linearRampToValueAtTime(0.032, now + seconds);
+  }
+
+  function reserveEffect(onEnded) {
+    if (!canPlay() || activeEffects >= maximumEffects) return false;
+    activeEffects += 1;
+    onEnded(() => { activeEffects = Math.max(0, activeEffects - 1); });
+    return true;
+  }
+
+  function tone({ frequency, endFrequency = frequency, seconds = 0.12, gain = 0.08, type = "sine" }) {
+    if (!reserveEffect((release) => {
+      const oscillator = context.createOscillator();
+      const volume = context.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(frequency, context.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(Math.max(16, endFrequency), context.currentTime + seconds);
+      volume.gain.setValueAtTime(0.0001, context.currentTime);
+      volume.gain.exponentialRampToValueAtTime(gain, context.currentTime + 0.008);
+      volume.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + seconds);
+      oscillator.connect(volume).connect(masterGain);
+      oscillator.onended = release;
+      oscillator.start();
+      oscillator.stop(context.currentTime + seconds + 0.02);
+    })) return;
+  }
+
+  function noise({ seconds = 0.13, gain = 0.055, frequency = 850, q = 0.7, fade = seconds }) {
+    if (!reserveEffect((release) => {
+      const source = context.createBufferSource();
+      const filter = context.createBiquadFilter();
+      const volume = context.createGain();
+      source.buffer = makeNoiseBuffer(seconds);
+      filter.type = "bandpass";
+      filter.frequency.value = frequency;
+      filter.Q.value = q;
+      volume.gain.setValueAtTime(gain, context.currentTime);
+      volume.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + fade);
+      source.connect(filter).connect(volume).connect(masterGain);
+      source.onended = release;
+      source.start();
+    })) return;
+  }
+
+  function startAmbience() {
+    if (!canPlay() || ambienceSource) return;
+    ambienceSource = context.createBufferSource();
+    ambienceGain = context.createGain();
+    const roofFilter = context.createBiquadFilter();
+    ambienceSource.buffer = makeNoiseBuffer(3.8);
+    ambienceSource.loop = true;
+    roofFilter.type = "lowpass";
+    roofFilter.frequency.value = 720;
+    ambienceGain.gain.value = 0.032;
+    ambienceSource.connect(roofFilter).connect(ambienceGain).connect(masterGain);
+    ambienceSource.onended = () => {
+      ambienceSource = null;
+      ambienceGain = null;
+    };
+    ambienceSource.start();
+  }
+
+  function stopAmbience() {
+    if (!ambienceSource) return;
+    const source = ambienceSource;
+    const gain = ambienceGain;
+    ambienceSource = null;
+    ambienceGain = null;
+    if (gain && context) {
+      const now = context.currentTime;
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(Math.max(0.0001, gain.gain.value), now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+      source.stop(now + 0.12);
+    } else {
+      source.stop();
+    }
+  }
+
+  function crowdReaction(intensity = 0.04) {
+    duckAmbience(0.7);
+    noise({ seconds: 0.48, gain: intensity, frequency: 540, q: 0.35, fade: 0.46 });
+  }
+
+  function playBat(timing) {
+    if (timing.band === "perfect") {
+      tone({ frequency: 530, endFrequency: 720, seconds: 0.11, gain: 0.11, type: "triangle" });
+      noise({ seconds: 0.07, gain: 0.045, frequency: 1600, q: 1.2 });
+      return;
+    }
+    if (timing.band === "good") {
+      tone({ frequency: 390, endFrequency: 510, seconds: 0.1, gain: 0.085, type: "triangle" });
+      return;
+    }
+    tone({ frequency: 205, endFrequency: 135, seconds: 0.12, gain: 0.065, type: "sine" });
+  }
+
+  return {
+    prepareFromGesture: ensureContextFromGesture,
+    startForGameplay() {
+      if (ensureContextFromGesture()) startAmbience();
+    },
+    pauseForOverlay: stopAmbience,
+    toggle() {
+      soundEnabled = !soundEnabled;
+      if (!soundEnabled) {
+        if (masterGain && context) masterGain.gain.setValueAtTime(0, context.currentTime);
+        stopAmbience();
+      } else if (ensureContextFromGesture()) {
+        masterGain.gain.setValueAtTime(0.72, context.currentTime);
+        if (isMatchActive()) startAmbience();
+      }
+      updateToggle();
+    },
+    playUi() { tone({ frequency: 460, endFrequency: 580, seconds: 0.065, gain: 0.045, type: "sine" }); },
+    playRelease() { noise({ seconds: 0.1, gain: 0.035, frequency: 430, q: 0.55 }); },
+    playBounce() { tone({ frequency: 185, endFrequency: 105, seconds: 0.09, gain: 0.065, type: "sine" }); },
+    playBat,
+    playWall(runs) {
+      const frontWall = runs >= 4;
+      noise({ seconds: frontWall ? 0.15 : 0.1, gain: frontWall ? 0.095 : 0.06, frequency: frontWall ? 250 : 620, q: frontWall ? 0.45 : 0.85 });
+      tone({ frequency: frontWall ? 205 : 295, endFrequency: frontWall ? 125 : 230, seconds: frontWall ? 0.13 : 0.09, gain: frontWall ? 0.065 : 0.045, type: "triangle" });
+      if (runs >= 4) crowdReaction(runs === 6 ? 0.075 : 0.055);
+    },
+    playStop() { noise({ seconds: 0.12, gain: 0.06, frequency: 360, q: 0.6 }); },
+    playCatch() {
+      noise({ seconds: 0.075, gain: 0.065, frequency: 1150, q: 1.05 });
+      tone({ frequency: 330, endFrequency: 245, seconds: 0.1, gain: 0.05, type: "triangle" });
+      crowdReaction(0.05);
+    },
+    playWicket() {
+      noise({ seconds: 0.18, gain: 0.095, frequency: 290, q: 0.45 });
+      tone({ frequency: 280, endFrequency: 120, seconds: 0.18, gain: 0.075, type: "triangle" });
+      crowdReaction(0.06);
+    },
+    playResult(isWin) {
+      duckAmbience(0.8);
+      if (isWin) {
+        tone({ frequency: 392, endFrequency: 784, seconds: 0.28, gain: 0.09, type: "triangle" });
+        crowdReaction(0.085);
+      } else {
+        tone({ frequency: 235, endFrequency: 125, seconds: 0.3, gain: 0.07, type: "sine" });
+      }
+    },
+    isEnabled() { return soundEnabled; }
+  };
+}
+
+const audioManager = createAudioManager();
 // Guard the first paint as well as later state changes: this overlay may only be
 // revealed after Lohit's first completed dismissal.
 bonusRewardElement.hidden = true;
@@ -491,6 +697,7 @@ function hideGameMenu() {
 }
 
 function showHowToPlay() {
+  audioManager.pauseForOverlay();
   menuHomeElement.hidden = true;
   howToPlayScreenElement.hidden = false;
 }
@@ -526,6 +733,7 @@ function resumeFrozenMatch() {
   pauseSnapshot = null;
   pauseButton.disabled = false;
   hideGameMenu();
+  audioManager.startForGameplay();
   lastFrame = now;
   if (startingFresh) {
     statusElement.textContent = `Ball ${ballsBowled + 1} of ${matchConfig.totalBalls} — choose Loft if you want a lofted shot.`;
@@ -534,6 +742,8 @@ function resumeFrozenMatch() {
 
 function pauseMatch() {
   if (!isMatchActive()) return;
+  audioManager.playUi();
+  audioManager.pauseForOverlay();
   pauseSnapshot = {
     startedAt: performance.now(),
     timingWasRunning: timingRunning
@@ -546,6 +756,7 @@ function pauseMatch() {
 }
 
 function showFreshStartMenu() {
+  audioManager.pauseForOverlay();
   startNewMatch();
   pauseSnapshot = {
     startedAt: performance.now(),
@@ -758,6 +969,8 @@ function updateBatterChange() {
 }
 
 function endMatch(reason, result = null) {
+  audioManager.pauseForOverlay();
+  audioManager.playResult(reason === "win");
   matchState = "complete";
   delivery.phase = "complete";
   inPlay = false;
@@ -1628,6 +1841,7 @@ function releaseDelivery(now) {
   timingProfile = createTimingProfile();
   timingPosition = timingProfile.startPosition;
   timingMarker.style.left = `${timingPosition * 100}%`;
+  audioManager.playRelease();
   statusElement.textContent = "Ball released — swipe as it reaches Lohit.";
 }
 
@@ -1681,6 +1895,7 @@ function updateDelivery(dt) {
     ball.vx *= 0.96;
     ball.vz *= 0.96;
     delivery.bounced = true;
+    audioManager.playBounce();
     activatePostBounceSpin();
   }
 
@@ -1696,6 +1911,7 @@ function updateDelivery(dt) {
     delivery.phase = "wicketHit";
     delivery.resultAt = now;
     timingRunning = false;
+    audioManager.playWicket();
     queueBallResult({
       wicket: true,
       dismissal: "bowled",
@@ -1718,11 +1934,13 @@ function updateShot(dt) {
   ball.z += ball.vz * dt;
 
   if (ball.y - ball.radius <= 0) {
+    const firstShotBounce = !shotHasBounced;
     ball.y = ball.radius;
     ball.vy = Math.abs(ball.vy) * 0.61;
     ball.vx *= 0.9;
     ball.vz *= 0.9;
     shotHasBounced = true;
+    if (firstShotBounce) audioManager.playBounce();
   }
   if (ball.y + ball.radius >= court.ceiling) {
     ball.y = court.ceiling - ball.radius;
@@ -1791,6 +2009,7 @@ function resolveFielderInteraction() {
     ball.vx = ball.vy = ball.vz = 0;
     delivery.phase = "fielderCaught";
     delivery.resultAt = performance.now();
+    audioManager.playCatch();
     queueBallResult({
       wicket: true,
       dismissal: "caught",
@@ -1813,6 +2032,7 @@ function resolveFielderInteraction() {
   ball.vx = ball.vy = ball.vz = 0;
   delivery.phase = "fielderStopped";
   delivery.resultAt = performance.now();
+  audioManager.playStop();
   queueBallResult({
     label: `Dot ball — stopped by ${fielder.label}`,
     status: `Stopped by ${fielder.label} — dot ball.`
@@ -1827,6 +2047,7 @@ function updateFielderResolution() {
 }
 
 function scoreRuns(runs) {
+  audioManager.playWall(runs);
   queueBallResult({
     runs,
     label: `${runs} run${runs === 1 ? "" : "s"}`,
@@ -2025,6 +2246,7 @@ function launchBall(angle) {
   // animation frame, so its displayed position and scoring result always agree.
   updateTimingGauge(performance.now());
   const timing = getTimingResult(timingPosition);
+  audioManager.playBat(timing);
   // Freeze the marker where the player pressed Launch so the result remains visible.
   timingRunning = false;
   // The player has already lifted the bat during the swipe. At release, show impact
@@ -2164,6 +2386,7 @@ function finishSwipe(event) {
 
 function toggleLoft() {
   if (!isMatchActive() || inPlay) return;
+  audioManager.playUi();
   loftSelected = !loftSelected;
   loftButton.classList.toggle("is-selected", loftSelected);
   loftButton.setAttribute("aria-pressed", String(loftSelected));
@@ -2198,12 +2421,35 @@ canvas.addEventListener("pointercancel", () => {
 });
 loftButton.addEventListener("click", toggleLoft);
 pauseButton.addEventListener("click", pauseMatch);
-startResumeButton.addEventListener("click", resumeFrozenMatch);
-openHowToPlayButton.addEventListener("click", showHowToPlay);
-closeHowToPlayButton.addEventListener("click", showMenuHome);
-playAgainButton.addEventListener("click", showFreshStartMenu);
-watchAdButton.addEventListener("click", () => applyBonusLineupChoice("unlocked"));
-skipSamratButton.addEventListener("click", () => applyBonusLineupChoice("skipped"));
+startResumeButton.addEventListener("click", () => {
+  audioManager.prepareFromGesture();
+  audioManager.playUi();
+  resumeFrozenMatch();
+});
+openHowToPlayButton.addEventListener("click", () => {
+  audioManager.playUi();
+  showHowToPlay();
+});
+closeHowToPlayButton.addEventListener("click", () => {
+  audioManager.playUi();
+  showMenuHome();
+});
+playAgainButton.addEventListener("click", () => {
+  audioManager.playUi();
+  showFreshStartMenu();
+});
+watchAdButton.addEventListener("click", () => {
+  audioManager.playUi();
+  applyBonusLineupChoice("unlocked");
+});
+skipSamratButton.addEventListener("click", () => {
+  audioManager.playUi();
+  applyBonusLineupChoice("skipped");
+});
+soundToggleButton.addEventListener("click", () => {
+  audioManager.toggle();
+  if (audioManager.isEnabled()) audioManager.playUi();
+});
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("load", refreshMenuActionState, { once: true });
 resizeCanvas();

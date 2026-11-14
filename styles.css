@@ -62,16 +62,20 @@ strong { font-size: 1.55rem; }
   letter-spacing: 0.03em;
 }
 .active-batter strong { color: #f3d37c; font-size: 0.88rem; }
-.pause-button {
+.match-actions { display: flex; align-items: center; gap: 7px; }
+.pause-button,
+.sound-button {
   min-height: 36px;
-  padding: 7px 13px;
+  padding: 7px 10px;
   border: 1px solid rgba(230, 239, 232, 0.32);
   border-radius: 10px;
-  background: #173b67;
   color: #eef5ff;
   font-size: 0.75rem;
   letter-spacing: 0.04em;
 }
+.pause-button { background: #173b67; }
+.sound-button { background: #294039; }
+.sound-button[aria-pressed="false"] { background: #3e3028; color: #e2c7b7; }
 
 canvas {
   width: 100%;

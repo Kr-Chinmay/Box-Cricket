@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#07120d">
     <title>Box Cricket — Physics Prototype</title>
-    <link rel="stylesheet" href="styles.css?v=leg-deep-12deg-v1">
+    <link rel="stylesheet" href="styles.css?v=audio-arena-v1">
   </head>
   <body>
     <main class="game-shell">
@@ -22,7 +22,10 @@
 
       <div class="active-batter-row">
         <p class="active-batter" aria-live="polite"><span>Batting:</span> <strong id="active-batter">Lohit</strong></p>
-        <button id="pause-match" class="pause-button" type="button" aria-label="Pause match">Pause</button>
+        <div class="match-actions">
+          <button id="sound-toggle" class="sound-button" type="button" aria-pressed="true" aria-label="Turn sound off">Sound: On</button>
+          <button id="pause-match" class="pause-button" type="button" aria-label="Pause match">Pause</button>
+        </div>
       </div>
 
       <canvas id="game" class="is-loading" width="420" height="760" aria-label="Box Cricket playable court"></canvas>
@@ -91,6 +94,6 @@
       </section>
     </main>
     <!-- Version the game script itself so GitHub Pages/browser caches cannot retain an older build. -->
-    <script src="app.js?v=leg-deep-12deg-v1"></script>
+    <script src="app.js?v=audio-arena-v1"></script>
   </body>
 </html>
