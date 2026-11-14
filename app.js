@@ -983,7 +983,7 @@ function endMatch(reason, result = null) {
   if (reason === "win") {
     resultKickerElement.textContent = "Target chased";
     resultTitleElement.textContent = "You win!";
-    resultCopyElement.textContent = `${score} / ${wickets} in ${formatOvers(ballsBowled)} overs — ${activeBatter().name} reaches ${matchConfig.target}.`;
+    resultCopyElement.textContent = `${score} / ${wickets} in ${formatOvers(ballsBowled)} overs — Your team reaches ${matchConfig.target}.`;
     statusElement.textContent = "Target reached — match won!";
   } else if (reason === "wicket") {
     resultKickerElement.textContent = "Wicket down";
