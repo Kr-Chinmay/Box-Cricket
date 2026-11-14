@@ -23,6 +23,15 @@ const bonusCopyElement = document.getElementById("bonus-copy");
 const bonusStateElement = document.getElementById("bonus-state");
 const watchAdButton = document.getElementById("watch-ad");
 const skipSamratButton = document.getElementById("skip-samrat");
+const pauseButton = document.getElementById("pause-match");
+const gameMenuElement = document.getElementById("game-menu");
+const menuHomeElement = document.getElementById("menu-home");
+const gameMenuTitleElement = document.getElementById("game-menu-title");
+const menuSummaryElement = document.getElementById("menu-summary");
+const startResumeButton = document.getElementById("start-resume");
+const openHowToPlayButton = document.getElementById("open-how-to-play");
+const howToPlayScreenElement = document.getElementById("how-to-play-screen");
+const closeHowToPlayButton = document.getElementById("close-how-to-play");
 // Guard the first paint as well as later state changes: this overlay may only be
 // revealed after Lohit's first completed dismissal.
 bonusRewardElement.hidden = true;
@@ -34,6 +43,7 @@ let lohitStanceReady = false;
 lohitStanceSprite.onload = () => {
   lohitStanceReady = true;
   canvas.classList.remove("is-loading");
+  requestAnimationFrame(refreshMenuActionState);
 };
 lohitStanceSprite.src = "lohit-batter-stance-v3.png";
 
@@ -109,6 +119,7 @@ let bowlerSpriteClean = null;
 bowlerSprite.onload = () => {
   bowlerSpriteClean = removeChromaMagenta(bowlerSprite);
   bowlerSpriteReady = true;
+  requestAnimationFrame(refreshMenuActionState);
 };
 bowlerSprite.src = "underarm-bowler-yellow-v2.png";
 
@@ -141,6 +152,7 @@ fielderSprite.onload = () => {
   // The fielder asset uses a solid magenta key so it can sit naturally inside the arena.
   fielderSpriteClean = removeChromaMagenta(fielderSprite);
   fielderSpriteReady = true;
+  requestAnimationFrame(refreshMenuActionState);
 };
 fielderSprite.src = "fielder-yellow-ready-v1.png";
 
@@ -150,6 +162,7 @@ let inwardFielderSpriteClean = null;
 inwardFielderSprite.onload = () => {
   inwardFielderSpriteClean = removeChromaMagenta(inwardFielderSprite);
   inwardFielderSpriteReady = true;
+  requestAnimationFrame(refreshMenuActionState);
 };
 inwardFielderSprite.src = "fielder-yellow-facing-batter-v1.png";
 
@@ -233,7 +246,9 @@ let batterChange = null;
 let bonusDecision = "pending";
 let pendingBonusWicket = null;
 let rewardResolveAt = 0;
-let matchState = "playing";
+let matchState = "paused";
+let menuMode = "start";
+let pauseSnapshot = null;
 let pendingBallResult = null;
 let inPlay = false;
 let scoredThisBall = false;
@@ -250,6 +265,125 @@ const driveAnimation = { phase: "idle", startedAt: 0 };
 
 function isMatchActive() {
   return matchState === "playing";
+}
+
+// Canvas drawing continues behind the menu so the arena remains visible. Use the exact
+// timestamp at which a match was paused, rather than wall-clock time, for any visual
+// animation that is currently on screen.
+function visualGameTime() {
+  return matchState === "paused" && pauseSnapshot
+    ? pauseSnapshot.startedAt
+    : performance.now();
+}
+
+// The start menu waits for the artwork that defines the first frame the player sees.
+// Later batting assets may still stream in safely while Lohit is at the crease.
+function isCoreArenaReady() {
+  return lohitStanceReady && bowlerSpriteReady && fielderSpriteReady && inwardFielderSpriteReady;
+}
+
+function refreshMenuActionState() {
+  if (menuMode === "resume") {
+    startResumeButton.disabled = false;
+    return;
+  }
+  const ready = isCoreArenaReady();
+  startResumeButton.disabled = !ready;
+  gameMenuTitleElement.textContent = ready ? "Ready for the chase?" : "Preparing the arena";
+  menuSummaryElement.textContent = ready
+    ? "Four overs. Target 40. Take guard when you're ready."
+    : "Preparing Lohit, the bowler, and the arena…";
+}
+
+function showMenuHome() {
+  menuHomeElement.hidden = false;
+  howToPlayScreenElement.hidden = true;
+}
+
+function showGameMenu(mode) {
+  menuMode = mode;
+  showMenuHome();
+  gameMenuElement.hidden = false;
+  gameMenuElement.setAttribute("aria-hidden", "false");
+  startResumeButton.textContent = mode === "resume" ? "Resume Match" : "Start Match";
+  if (mode === "resume") {
+    gameMenuTitleElement.textContent = "Match paused";
+    menuSummaryElement.textContent = "Your match is waiting exactly where you left it.";
+  }
+  refreshMenuActionState();
+}
+
+function hideGameMenu() {
+  gameMenuElement.hidden = true;
+  gameMenuElement.setAttribute("aria-hidden", "true");
+}
+
+function showHowToPlay() {
+  menuHomeElement.hidden = true;
+  howToPlayScreenElement.hidden = false;
+}
+
+function shiftPauseTimestamp(object, property, elapsed) {
+  if (typeof object[property] === "number" && object[property] > 0) {
+    object[property] += elapsed;
+  }
+}
+
+function resumeFrozenMatch() {
+  if (menuMode === "start" && !isCoreArenaReady()) return;
+  const now = performance.now();
+  const pausedFor = pauseSnapshot ? now - pauseSnapshot.startedAt : 0;
+
+  // The gameplay uses absolute performance timestamps for every delivery phase. Move
+  // all of them forward by the paused duration, so a ball never teleports, expires,
+  // or changes result while the menu is open.
+  ["nextAt", "windupAt", "releasedAt", "resultAt"].forEach((property) => {
+    shiftPauseTimestamp(delivery, property, pausedFor);
+  });
+  if (resetTime > 0) resetTime += pausedFor;
+  if (batterChange) shiftPauseTimestamp(batterChange, "startedAt", pausedFor);
+  shiftPauseTimestamp(driveAnimation, "startedAt", pausedFor);
+  if (rewardResolveAt > 0) rewardResolveAt += pausedFor;
+  if (pauseSnapshot?.timingWasRunning) {
+    timingStartedAt += pausedFor;
+    timingRunning = true;
+  }
+
+  const startingFresh = menuMode === "start";
+  matchState = "playing";
+  pauseSnapshot = null;
+  pauseButton.disabled = false;
+  hideGameMenu();
+  lastFrame = now;
+  if (startingFresh) {
+    statusElement.textContent = `Ball ${ballsBowled + 1} of ${matchConfig.totalBalls} — choose Loft if you want a lofted shot.`;
+  }
+}
+
+function pauseMatch() {
+  if (!isMatchActive()) return;
+  pauseSnapshot = {
+    startedAt: performance.now(),
+    timingWasRunning: timingRunning
+  };
+  timingRunning = false;
+  swipeStart = null;
+  matchState = "paused";
+  pauseButton.disabled = true;
+  showGameMenu("resume");
+}
+
+function showFreshStartMenu() {
+  startNewMatch();
+  pauseSnapshot = {
+    startedAt: performance.now(),
+    timingWasRunning: false
+  };
+  timingRunning = false;
+  matchState = "paused";
+  pauseButton.disabled = true;
+  statusElement.textContent = "Tap Start Match when you're ready.";
+  showGameMenu("start");
 }
 
 function formatOvers(ballCount) {
@@ -458,6 +592,7 @@ function endMatch(reason, result = null) {
   timingRunning = false;
   swipeStart = null;
   loftButton.disabled = true;
+  pauseButton.disabled = true;
 
   const runsShort = Math.max(0, matchConfig.target - score);
   if (reason === "win") {
@@ -497,6 +632,7 @@ function startNewMatch() {
   matchConfig.maxWickets = ordinaryLineup.length;
   matchState = "playing";
   pendingBallResult = null;
+  resetTime = 0;
   scoredThisBall = false;
   shotAngle = defaultShotAngle;
   loftSelected = false;
@@ -693,7 +829,7 @@ function drawBatter() {
   const { spriteX, spriteY, spriteWidth, spriteHeight } = batterLayout();
   const sprite = getDriveSprite();
   if (!sprite) return;
-  const changeElapsed = batterChange ? performance.now() - batterChange.startedAt : null;
+  const changeElapsed = batterChange ? visualGameTime() - batterChange.startedAt : null;
   let opacity = 1;
   if (batterChange && !batterChange.switched) opacity = Math.max(0, 1 - changeElapsed / 280);
   if (batterChange?.switched) opacity = Math.min(1, Math.max(0, (changeElapsed - 360) / 260));
@@ -704,7 +840,7 @@ function drawBatter() {
   ctx.restore();
 }
 
-function getDriveSprite(now = performance.now()) {
+function getDriveSprite(now = visualGameTime()) {
   const batter = activeBatter();
   if (!isBatterReady(batter)) return null;
   if (driveAnimation.phase === "idle") return batter.stance;
@@ -915,7 +1051,7 @@ function drawWicket(z, heightWorld, canBreak = false) {
   const isBroken = canBreak && delivery.phase === "wicketHit";
   // The wicket falls quickly at impact, then remains dismantled long enough to read clearly.
   const breakProgress = isBroken
-    ? Math.min(1, Math.max(0, (performance.now() - delivery.resultAt) / 260))
+    ? Math.min(1, Math.max(0, (visualGameTime() - delivery.resultAt) / 260))
     : 0;
   ctx.save();
   ctx.fillStyle = "rgba(0, 0, 0, .42)";
@@ -1150,7 +1286,7 @@ function update(dt) {
   updateShot(dt);
 }
 
-function getBowlerReleaseProgress(now = performance.now()) {
+function getBowlerReleaseProgress(now = visualGameTime()) {
   if (delivery.phase === "windup") {
     return Math.min(1, Math.max(0, (now - delivery.windupAt) / deliveryWindupMs));
   }
@@ -1556,10 +1692,15 @@ canvas.addEventListener("pointercancel", () => {
   if (isBallPlayable()) statusElement.textContent = "Swipe forward in the court to play a shot.";
 });
 loftButton.addEventListener("click", toggleLoft);
-playAgainButton.addEventListener("click", startNewMatch);
+pauseButton.addEventListener("click", pauseMatch);
+startResumeButton.addEventListener("click", resumeFrozenMatch);
+openHowToPlayButton.addEventListener("click", showHowToPlay);
+closeHowToPlayButton.addEventListener("click", showMenuHome);
+playAgainButton.addEventListener("click", showFreshStartMenu);
 watchAdButton.addEventListener("click", () => applyBonusLineupChoice("unlocked"));
 skipSamratButton.addEventListener("click", () => applyBonusLineupChoice("skipped"));
 window.addEventListener("resize", resizeCanvas);
+window.addEventListener("load", refreshMenuActionState, { once: true });
 resizeCanvas();
-startNewMatch();
+showFreshStartMenu();
 requestAnimationFrame(frame);

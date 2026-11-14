@@ -48,13 +48,30 @@ strong { font-size: 1.55rem; }
 }
 .match-summary span:last-child { text-align: right; color: #b7c3b7; }
 
-.active-batter {
+.active-batter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin: -5px 4px 10px;
+}
+.active-batter {
+  margin: 0;
   color: #b7c3b7;
   font-size: 0.78rem;
   letter-spacing: 0.03em;
 }
 .active-batter strong { color: #f3d37c; font-size: 0.88rem; }
+.pause-button {
+  min-height: 36px;
+  padding: 7px 13px;
+  border: 1px solid rgba(230, 239, 232, 0.32);
+  border-radius: 10px;
+  background: #173b67;
+  color: #eef5ff;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
 
 canvas {
   width: 100%;
@@ -94,6 +111,45 @@ button:disabled { opacity: 0.55; cursor: wait; }
 .loft-button { background: #264d94; color: #f5f8ff; }
 .loft-button.is-selected { background: #e07525; color: #1d0e05; box-shadow: inset 0 0 0 2px #ffd176; }
 .hint { margin: 10px 8px 0; color: #b7c3b7; font-size: 0.82rem; line-height: 1.4; }
+
+/* The menu leaves the rendered arena visible, while preventing the underlying court
+   from receiving taps during loading or a paused match. */
+.game-menu {
+  position: fixed;
+  z-index: 9;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  background: rgba(2, 10, 7, 0.7);
+  backdrop-filter: blur(5px);
+}
+.game-menu[hidden] { display: none !important; }
+.menu-card,
+.how-to-play-card {
+  width: min(100%, 390px);
+  border: 1px solid rgba(244, 211, 124, 0.76);
+  border-radius: 22px;
+  background: linear-gradient(150deg, rgba(24, 58, 100, 0.98), rgba(8, 24, 38, 0.98) 62%, rgba(10, 37, 25, 0.98));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.76), inset 0 1px 0 rgba(255,255,255,.12);
+  text-align: center;
+}
+.menu-card { padding: 28px 22px 22px; }
+.menu-card h1,
+.how-to-play-card h1 { margin: 7px 0 10px; color: #ffd176; font-size: clamp(1.7rem, 7vw, 2.15rem); }
+.menu-summary { min-height: 2.8em; margin: 0 auto 22px; color: #e3eaf4; line-height: 1.45; }
+.menu-actions { display: grid; gap: 11px; }
+.start-button { background: #e07525; color: #1d0e05; box-shadow: inset 0 0 0 2px #ffd176; }
+.how-to-play-button,
+.back-button { border: 1px solid rgba(220, 230, 244, .44); background: #1a3152; color: #eef5ff; }
+.how-to-play-screen { width: min(100%, 430px); }
+.how-to-play-card { max-height: min(760px, calc(100vh - 48px)); overflow-y: auto; padding: 25px 22px 22px; text-align: left; }
+.how-to-play-card h1 { text-align: center; }
+.how-to-play-card ol { display: grid; gap: 11px; margin: 19px 0 23px; padding-left: 1.4rem; color: #e3eaf4; line-height: 1.4; }
+.how-to-play-card li::marker { color: #ffd176; font-weight: 800; }
+.how-to-play-card li strong { color: #f5d782; font-size: inherit; }
+.how-to-play-card .back-button { width: 100%; }
 
 .match-result {
   position: fixed;
@@ -150,4 +206,6 @@ button:disabled { opacity: 0.55; cursor: wait; }
 @media (max-width: 360px) {
   strong { font-size: 1.28rem; }
   .match-summary { font-size: 0.69rem; }
+  .menu-card { padding: 24px 18px 18px; }
+  .how-to-play-card { padding: 22px 18px 18px; }
 }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#07120d">
     <title>Box Cricket — Physics Prototype</title>
-    <link rel="stylesheet" href="styles.css?v=bonus-reward-v3">
+    <link rel="stylesheet" href="styles.css?v=match-menu-v1">
   </head>
   <body>
     <main class="game-shell">
@@ -20,9 +20,42 @@
         <span id="last-ball">Previous ball: —</span>
       </div>
 
-      <p class="active-batter" aria-live="polite"><span>Batting:</span> <strong id="active-batter">Lohit</strong></p>
+      <div class="active-batter-row">
+        <p class="active-batter" aria-live="polite"><span>Batting:</span> <strong id="active-batter">Lohit</strong></p>
+        <button id="pause-match" class="pause-button" type="button" aria-label="Pause match">Pause</button>
+      </div>
 
       <canvas id="game" class="is-loading" width="420" height="760" aria-label="Box Cricket playable court"></canvas>
+
+      <section id="game-menu" class="game-menu" role="dialog" aria-modal="true" aria-labelledby="game-menu-title" aria-hidden="false">
+        <div id="menu-home" class="menu-card">
+          <p class="eyebrow">Box Cricket</p>
+          <h1 id="game-menu-title">Ready for the chase?</h1>
+          <p id="menu-summary" class="menu-summary">Preparing Lohit and the arena…</p>
+          <div class="menu-actions">
+            <button id="start-resume" class="start-button" type="button" disabled>Start Match</button>
+            <button id="open-how-to-play" class="how-to-play-button" type="button">How to Play</button>
+          </div>
+        </div>
+
+        <div id="how-to-play-screen" class="how-to-play-screen" hidden>
+          <div class="how-to-play-card">
+            <p class="eyebrow">Box Cricket guide</p>
+            <h1>How to Play</h1>
+            <ol>
+              <li><strong>Swipe forward</strong> inside the court to play a shot.</li>
+              <li>Angle your swipe <strong>left or right</strong> to choose the shot direction.</li>
+              <li>Turn <strong>Loft</strong> on for a higher, riskier shot.</li>
+              <li>Strike when the marker is near the green <strong>Perfect</strong> zone.</li>
+              <li>Hit the numbered walls to score <strong>1, 2, 4, or 6</strong>.</li>
+              <li>Fielders can stop ground shots or catch lofted shots.</li>
+              <li>Chase <strong>40 runs in 4 overs</strong>.</li>
+              <li>After Lohit is out, Samrat may be unlocked through the optional reward choice.</li>
+            </ol>
+            <button id="close-how-to-play" class="back-button" type="button">Back</button>
+          </div>
+        </div>
+      </section>
 
       <section id="match-result" class="match-result" aria-live="assertive" aria-hidden="true" hidden>
         <p id="result-kicker" class="eyebrow">Match complete</p>
@@ -57,6 +90,6 @@
       </section>
     </main>
     <!-- Version the game script itself so GitHub Pages/browser caches cannot retain an older build. -->
-    <script src="app.js?v=bonus-reward-v3"></script>
+    <script src="app.js?v=match-menu-v1"></script>
   </body>
 </html>
