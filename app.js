@@ -194,16 +194,22 @@ const bowlingPoppingCreaseZ = bowlingStumpsZ - 1.25;
 // In this arena that is roughly two world units: visible movement, but never a dive
 // or an unrealistic run across half the court.
 const fielderMoveLimit = court.halfWidth * 2 * 0.05;
+// Catching has to be more exact than ground stopping. A player can shuffle further
+// to cut off a roller than they can to get both hands under an aerial ball.
+const fielderCatchMoveLimit = court.halfWidth * 2 * 0.03;
+const fielderCatchReactionSeconds = 0.2;
+const fielderCatchSetupSeconds = 0.1;
+const fielderStopReactionSeconds = 0.08;
 const fielderMoveSpeed = 5.7;
 const fielderAcceleration = 18;
 const fielderDeceleration = 24;
 // These same world coordinates drive both the drawn fielders and their deterministic
 // interception zones, so the ball can only be caught or stopped where a player is visible.
 const fielders = [
-  { id: "left-front", label: "Left front-wall fielder", x: -11.2, z: 17.8, homeX: -11.2, homeZ: 17.8, height: 118, mirror: false, pose: "deep", radius: 1.32, catchMinHeight: 1.5, catchMaxHeight: 6.9, action: "ready", speed: 0 },
-  { id: "right-front", label: "Right front-wall fielder", x: 11.2, z: 17.8, homeX: 11.2, homeZ: 17.8, height: 118, mirror: true, pose: "deep", radius: 1.32, catchMinHeight: 1.5, catchMaxHeight: 6.9, action: "ready", speed: 0 },
-  { id: "leg-side", label: "Leg-side wall fielder", x: -9.8, z: 3.2, homeX: -9.8, homeZ: 3.2, height: 78, mirror: false, pose: "side", radius: 1.18, catchMinHeight: 1.05, catchMaxHeight: 3.25, action: "ready", speed: 0 },
-  { id: "off-side", label: "Off-side wall fielder", x: 9.8, z: 3.2, homeX: 9.8, homeZ: 3.2, height: 78, mirror: true, pose: "side", radius: 1.18, catchMinHeight: 1.05, catchMaxHeight: 3.25, action: "ready", speed: 0 }
+  { id: "left-front", label: "Left front-wall fielder", x: -11.2, z: 17.8, homeX: -11.2, homeZ: 17.8, height: 118, mirror: false, pose: "deep", radius: 1.32, catchRadius: 0.56, catchMinHeight: 1.7, catchMaxHeight: 4.85, action: "ready", speed: 0 },
+  { id: "right-front", label: "Right front-wall fielder", x: 11.2, z: 17.8, homeX: 11.2, homeZ: 17.8, height: 118, mirror: true, pose: "deep", radius: 1.32, catchRadius: 0.56, catchMinHeight: 1.7, catchMaxHeight: 4.85, action: "ready", speed: 0 },
+  { id: "leg-side", label: "Leg-side wall fielder", x: -9.8, z: 3.2, homeX: -9.8, homeZ: 3.2, height: 78, mirror: false, pose: "side", radius: 1.18, catchRadius: 0.46, catchMinHeight: 1.4, catchMaxHeight: 2.85, action: "ready", speed: 0 },
+  { id: "off-side", label: "Off-side wall fielder", x: 9.8, z: 3.2, homeX: 9.8, homeZ: 3.2, height: 78, mirror: true, pose: "side", radius: 1.18, catchRadius: 0.46, catchMinHeight: 1.4, catchMaxHeight: 2.85, action: "ready", speed: 0 }
 ];
 // Once he has released the underarm delivery, the bowler becomes the fifth active fielder.
 const bowlerFielder = {
@@ -217,8 +223,9 @@ const bowlerFielder = {
   mirror: false,
   pose: "bowler",
   radius: 1.08,
-  catchMinHeight: 1.05,
-  catchMaxHeight: 3.55,
+  catchRadius: 0.42,
+  catchMinHeight: 1.35,
+  catchMaxHeight: 2.7,
   action: "ready",
   speed: 0
 };
@@ -271,6 +278,9 @@ let pendingBallResult = null;
 let inPlay = false;
 let scoredThisBall = false;
 let shotWasLofted = false;
+// Every played ball gets one deterministic physical profile. The fielding system uses
+// this profile rather than a random catch roll, so the player can learn the risk.
+let shotProfile = null;
 let shotHasBounced = false;
 let shotHasTouchedRoof = false;
 let shotHasTouchedRearWall = false;
@@ -794,6 +804,7 @@ function startNewMatch() {
   deliveryDeck = createDeliveryDeck();
   delivery.plan = null;
   delivery.spin = null;
+  shotProfile = null;
   activeLineup = ordinaryLineup;
   activeBatterIndex = 0;
   batterChange = null;
@@ -1348,11 +1359,19 @@ function updateFielders(dt) {
 
   fieldingActors.forEach((actor) => {
     const selected = fieldingPlay?.actor === actor;
-    const target = selected ? fieldingPlay.target : { x: actor.homeX, z: actor.homeZ };
+    const hasReacted = selected && performance.now() >= fieldingPlay.moveAt;
+    const target = selected && hasReacted
+      ? fieldingPlay.target
+      : { x: actor.homeX, z: actor.homeZ };
     moveFieldingActor(actor, target, dt);
 
     if (!selected) return;
-    const closeToBall = Math.hypot(ball.x - actor.x, ball.z - actor.z) <= actor.radius + 0.72;
+    if (!hasReacted) {
+      actor.action = "ready";
+      return;
+    }
+    const interactionRadius = fieldingPlay.kind === "catch" ? actor.catchRadius : actor.radius;
+    const closeToBall = Math.hypot(ball.x - actor.x, ball.z - actor.z) <= interactionRadius + 0.28;
     actor.action = closeToBall
       ? fieldingPlay.kind === "catch" ? "catch" : "stop"
       : "shuffle";
@@ -1374,6 +1393,19 @@ function moveFieldingActor(actor, target, dt) {
   }
   if (distance <= 0.04) actor.speed = 0;
   if (actor.action !== "catch" && actor.action !== "stop") actor.action = distance > 0.08 ? "shuffle" : "ready";
+}
+
+function isApproachingFielderFront(actor, vx, vz) {
+  // Fielders face Lohit. Reverse the ball velocity to ask whether it is arriving
+  // from that forward-facing side, rather than from behind or an implausible angle.
+  const fromBallX = -vx;
+  const fromBallZ = -vz;
+  const facingX = -actor.homeX;
+  const facingZ = battingStumpsZ - actor.homeZ;
+  const fromBallLength = Math.hypot(fromBallX, fromBallZ) || 1;
+  const facingLength = Math.hypot(facingX, facingZ) || 1;
+  const alignment = (fromBallX * facingX + fromBallZ * facingZ) / (fromBallLength * facingLength);
+  return alignment >= 0.4;
 }
 
 function predictFieldingPlay() {
@@ -1413,23 +1445,46 @@ function predictFieldingPlay() {
     const candidate = fieldingActors
       .map((actor) => {
         const distanceFromHome = Math.hypot(simulation.x - actor.homeX, simulation.z - actor.homeZ);
-        const moveNeeded = Math.max(0, distanceFromHome - actor.radius);
-        const canReach = moveNeeded <= fielderMoveLimit && estimateFielderMoveTime(moveNeeded) <= elapsed;
-        const canCatch = !simulation.bounced
+        const canCatch = Boolean(shotProfile?.catchEligible)
+          && !simulation.bounced
           && !simulation.touchedRoof
           && simulation.y >= actor.catchMinHeight
-          && simulation.y <= actor.catchMaxHeight;
-        const canStop = simulation.bounced || simulation.y <= actor.catchMinHeight;
+          && simulation.y <= actor.catchMaxHeight
+          && isApproachingFielderFront(actor, simulation.vx, simulation.vz);
+        // A ground ball must first visibly bounce. A low full toss cannot be magically
+        // collected as a stop before the promised ground-drive bounce takes place.
+        const canStop = simulation.bounced;
         const kind = canCatch ? "catch" : canStop ? "stop" : null;
-        return canReach && kind ? { actor, kind, time: elapsed, x: simulation.x, z: simulation.z, y: simulation.y, distanceFromHome } : null;
+        if (!kind) return null;
+        const interactionRadius = kind === "catch" ? actor.catchRadius : actor.radius;
+        const moveNeeded = Math.max(0, distanceFromHome - interactionRadius);
+        const moveLimit = kind === "catch" ? fielderCatchMoveLimit : fielderMoveLimit;
+        const reactionTime = kind === "catch" ? fielderCatchReactionSeconds : fielderStopReactionSeconds;
+        const setupTime = kind === "catch" ? fielderCatchSetupSeconds : 0;
+        const canReach = moveNeeded <= moveLimit
+          && estimateFielderMoveTime(moveNeeded) + reactionTime + setupTime <= elapsed;
+        return canReach ? {
+          actor,
+          kind,
+          time: elapsed,
+          x: simulation.x,
+          z: simulation.z,
+          y: simulation.y,
+          distanceFromHome,
+          reactionTime
+        } : null;
       })
       .filter(Boolean)
       .sort((a, b) => a.distanceFromHome - b.distanceFromHome)[0];
 
     if (candidate) {
-      const target = getReachableFieldingTarget(candidate.actor, candidate.x, candidate.z);
+      const target = getReachableFieldingTarget(candidate.actor, candidate.x, candidate.z, candidate.kind);
       console.debug(`[Fielding V2] ${candidate.actor.label} selected for ${candidate.kind} at ${candidate.time.toFixed(2)}s.`);
-      return { ...candidate, target };
+      return {
+        ...candidate,
+        target,
+        moveAt: performance.now() + candidate.reactionTime * 1000
+      };
     }
   }
   console.debug("[Fielding V2] No reachable player selected; ball continues to the wall.");
@@ -1442,11 +1497,12 @@ function estimateFielderMoveTime(distance) {
   return fielderMoveSpeed / fielderAcceleration + (distance - accelerationDistance) / fielderMoveSpeed;
 }
 
-function getReachableFieldingTarget(actor, ballX, ballZ) {
+function getReachableFieldingTarget(actor, ballX, ballZ, kind) {
   const dx = ballX - actor.homeX;
   const dz = ballZ - actor.homeZ;
   const distance = Math.hypot(dx, dz) || 1;
-  const travel = Math.min(fielderMoveLimit, distance);
+  const movementLimit = kind === "catch" ? fielderCatchMoveLimit : fielderMoveLimit;
+  const travel = Math.min(movementLimit, distance);
   return {
     x: actor.homeX + dx / distance * travel,
     z: actor.homeZ + dz / distance * travel
@@ -1736,13 +1792,15 @@ function resolveFielderInteraction() {
   const fielder = fieldingPlay?.actor;
   if (!fielder) return false;
   const distance = Math.hypot(ball.x - fielder.x, ball.z - fielder.z);
-  if (distance > fielder.radius) return false;
 
-  const canCatch = !shotHasBounced
+  const canCatch = Boolean(shotProfile?.catchEligible)
+    && distance <= fielder.catchRadius
+    && !shotHasBounced
     && !shotHasTouchedRoof
     && !shotHasTouchedRearWall
     && ball.y >= fielder.catchMinHeight
-    && ball.y <= fielder.catchMaxHeight;
+    && ball.y <= fielder.catchMaxHeight
+    && isApproachingFielderFront(fielder, ball.vx, ball.vz);
 
   if (canCatch) {
     // Preserve the actual meeting point instead of snapping the ball to a distant sprite.
@@ -1761,7 +1819,7 @@ function resolveFielderInteraction() {
     return true;
   }
 
-  const canStop = shotHasBounced || ball.y <= fielder.catchMinHeight;
+  const canStop = shotHasBounced && distance <= fielder.radius;
   if (!canStop) return false;
 
   // A stopped ball is placed at the selected player's feet only after the player has
@@ -1901,6 +1959,81 @@ function createTimingProfile() {
   };
 }
 
+function createShotProfile(timing, lofted) {
+  const directionBias = timing.side === "early" ? -0.16 : timing.side === "late" ? 0.16 : 0;
+
+  if (!lofted) {
+    if (timing.isExtreme) {
+      // The only Loft Off aerial risk: an obvious top-edge or early/late pop-up.
+      // It remains deterministic and is catchable only if it physically reaches hands.
+      return {
+        kind: "ground-pop-up",
+        catchEligible: true,
+        contactHeight: 0.82,
+        verticalVelocity: 6.15,
+        speedMultiplier: 0.76,
+        directionBias: directionBias * 1.45
+      };
+    }
+
+    // Normal Loft Off batting is deliberately kept below catching height and lands
+    // before the inner ring. The value is a low driven bounce, not a disguised loft.
+    const isGoodOrPerfect = timing.band === "good" || timing.band === "perfect";
+    return {
+      kind: "ground-drive",
+      catchEligible: false,
+      contactHeight: 0.27,
+      verticalVelocity: isGoodOrPerfect ? 0.72 : 0.9,
+      speedMultiplier: timing.band === "perfect" ? 1.05 : timing.band === "good" ? 0.95 : 0.8,
+      directionBias: timing.band === "mistimed" ? directionBias * 0.55 : 0
+    };
+  }
+
+  if (timing.band === "perfect") {
+    // A well-timed loft must visibly clear the close ring before it asks anything of
+    // the deeper fielders. That is the reward for choosing the riskier shot.
+    return {
+      kind: "controlled-loft",
+      catchEligible: true,
+      contactHeight: 0.82,
+      verticalVelocity: 10.7,
+      speedMultiplier: 1.05,
+      directionBias: 0
+    };
+  }
+
+  if (timing.band === "good") {
+    return {
+      kind: "lower-loft",
+      catchEligible: true,
+      contactHeight: 0.82,
+      verticalVelocity: 7.45,
+      speedMultiplier: 0.93,
+      directionBias: directionBias * 0.25
+    };
+  }
+
+  if (timing.band === "mistimed") {
+    return {
+      kind: "ballooning-loft",
+      catchEligible: true,
+      contactHeight: 0.82,
+      verticalVelocity: 8.25,
+      speedMultiplier: 0.78,
+      directionBias: directionBias * 0.85
+    };
+  }
+
+  return {
+    kind: "extreme-loft",
+    catchEligible: true,
+    contactHeight: 0.82,
+    verticalVelocity: 9.15,
+    speedMultiplier: 0.7,
+    directionBias: directionBias * 1.5
+  };
+}
+
 function launchBall(angle) {
   if (!isBallPlayable()) {
     statusElement.textContent = "Wait for the ball to reach Lohit before playing the shot.";
@@ -1917,15 +2050,16 @@ function launchBall(angle) {
   driveAnimation.phase = "contact";
   driveAnimation.startedAt = performance.now();
   // Pull the delivery into Lohit's contact area before sending it away from the bat.
+  // The whole shot profile is fixed here, before fielders predict its path.
+  shotProfile = createShotProfile(timing, loftSelected);
+  const resolvedAngle = clampShotAngle(angle + shotProfile.directionBias);
   ball.x = Math.max(-0.42, Math.min(0.42, ball.x));
-  ball.y = Math.max(0.82, ball.y + 0.2);
+  ball.y = Math.max(shotProfile.contactHeight, ball.radius * 1.1);
   ball.z = battingStumpsZ + 0.48;
-  // Timing affects accuracy and power. Later, poor timing will also allow misses and catches.
-  const shotSpeed = 20.5 * timing.power;
-  ball.vx = Math.sin(angle) * shotSpeed * timing.accuracy;
-  // A lofted shot has enough height to reach the upper scoring bands without hitting the roof.
-  ball.vy = (loftSelected ? 10.2 : 5.9) * timing.power;
-  ball.vz = Math.cos(angle) * shotSpeed;
+  const shotSpeed = 20.5 * shotProfile.speedMultiplier;
+  ball.vx = Math.sin(resolvedAngle) * shotSpeed * timing.accuracy;
+  ball.vy = shotProfile.verticalVelocity;
+  ball.vz = Math.cos(resolvedAngle) * shotSpeed;
   // Pick one reachable defender from the projected path before the ball starts moving.
   // This avoids every fielder reacting late to the same live ball.
   fieldingPlay = predictFieldingPlay();
@@ -1942,10 +2076,15 @@ function launchBall(angle) {
 }
 
 function getTimingResult(position) {
-  const distance = Math.abs(position - 0.5);
-  if (distance <= 0.11) return { label: "Perfect", power: 1.05, accuracy: 1 };
-  if (distance <= 0.25) return { label: "Good", power: 0.95, accuracy: 0.93 };
-  return { label: "Mistimed", power: 0.82, accuracy: 0.72 };
+  // The bands intentionally make 60% of the bar a rewarding Good/Perfect window.
+  // The outer 20% is still demanding and is the only source of Loft Off pop-ups.
+  if (position < 0.1) return { label: "Early", band: "extreme", side: "early", isExtreme: true, accuracy: 0.64 };
+  if (position < 0.2) return { label: "Mistimed early", band: "mistimed", side: "early", isExtreme: false, accuracy: 0.78 };
+  if (position < 0.35) return { label: "Good", band: "good", side: "early", isExtreme: false, accuracy: 0.94 };
+  if (position <= 0.65) return { label: "Perfect", band: "perfect", side: null, isExtreme: false, accuracy: 1 };
+  if (position <= 0.8) return { label: "Good", band: "good", side: "late", isExtreme: false, accuracy: 0.94 };
+  if (position <= 0.9) return { label: "Mistimed late", band: "mistimed", side: "late", isExtreme: false, accuracy: 0.78 };
+  return { label: "Late", band: "extreme", side: "late", isExtreme: true, accuracy: 0.64 };
 }
 
 function updateTimingGauge(now) {
@@ -1968,6 +2107,7 @@ function resetBall(message) {
   inPlay = false;
   scoredThisBall = false;
   shotWasLofted = false;
+  shotProfile = null;
   shotHasBounced = false;
   shotHasTouchedRoof = false;
   shotHasTouchedRearWall = false;
