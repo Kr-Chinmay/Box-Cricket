@@ -194,22 +194,16 @@ const bowlingPoppingCreaseZ = bowlingStumpsZ - 1.25;
 // In this arena that is roughly two world units: visible movement, but never a dive
 // or an unrealistic run across half the court.
 const fielderMoveLimit = court.halfWidth * 2 * 0.05;
-// Catching has to be more exact than ground stopping. A player can shuffle further
-// to cut off a roller than they can to get both hands under an aerial ball.
-const fielderCatchMoveLimit = court.halfWidth * 2 * 0.03;
-const fielderCatchReactionSeconds = 0.2;
-const fielderCatchSetupSeconds = 0.1;
-const fielderStopReactionSeconds = 0.08;
 const fielderMoveSpeed = 5.7;
 const fielderAcceleration = 18;
 const fielderDeceleration = 24;
 // These same world coordinates drive both the drawn fielders and their deterministic
 // interception zones, so the ball can only be caught or stopped where a player is visible.
 const fielders = [
-  { id: "left-front", label: "Left front-wall fielder", x: -11.2, z: 17.8, homeX: -11.2, homeZ: 17.8, height: 118, mirror: false, pose: "deep", radius: 1.32, catchRadius: 0.56, catchMinHeight: 1.7, catchMaxHeight: 4.85, action: "ready", speed: 0 },
-  { id: "right-front", label: "Right front-wall fielder", x: 11.2, z: 17.8, homeX: 11.2, homeZ: 17.8, height: 118, mirror: true, pose: "deep", radius: 1.32, catchRadius: 0.56, catchMinHeight: 1.7, catchMaxHeight: 4.85, action: "ready", speed: 0 },
-  { id: "leg-side", label: "Leg-side wall fielder", x: -9.8, z: 3.2, homeX: -9.8, homeZ: 3.2, height: 78, mirror: false, pose: "side", radius: 1.18, catchRadius: 0.46, catchMinHeight: 1.4, catchMaxHeight: 2.85, action: "ready", speed: 0 },
-  { id: "off-side", label: "Off-side wall fielder", x: 9.8, z: 3.2, homeX: 9.8, homeZ: 3.2, height: 78, mirror: true, pose: "side", radius: 1.18, catchRadius: 0.46, catchMinHeight: 1.4, catchMaxHeight: 2.85, action: "ready", speed: 0 }
+  { id: "left-front", label: "Left front-wall fielder", x: -11.2, z: 17.8, homeX: -11.2, homeZ: 17.8, height: 118, mirror: false, pose: "deep", radius: 1.32, catchRadius: 1.12, catchMinHeight: 1.7, catchMaxHeight: 4.85, action: "ready", speed: 0 },
+  { id: "right-front", label: "Right front-wall fielder", x: 11.2, z: 17.8, homeX: 11.2, homeZ: 17.8, height: 118, mirror: true, pose: "deep", radius: 1.32, catchRadius: 1.12, catchMinHeight: 1.7, catchMaxHeight: 4.85, action: "ready", speed: 0 },
+  { id: "leg-side", label: "Leg-side wall fielder", x: -9.8, z: 3.2, homeX: -9.8, homeZ: 3.2, height: 78, mirror: false, pose: "side", radius: 1.18, catchRadius: 0.92, catchMinHeight: 1.4, catchMaxHeight: 2.85, action: "ready", speed: 0 },
+  { id: "off-side", label: "Off-side wall fielder", x: 9.8, z: 3.2, homeX: 9.8, homeZ: 3.2, height: 78, mirror: true, pose: "side", radius: 1.18, catchRadius: 0.92, catchMinHeight: 1.4, catchMaxHeight: 2.85, action: "ready", speed: 0 }
 ];
 // Once he has released the underarm delivery, the bowler becomes the fifth active fielder.
 const bowlerFielder = {
@@ -223,7 +217,7 @@ const bowlerFielder = {
   mirror: false,
   pose: "bowler",
   radius: 1.08,
-  catchRadius: 0.42,
+  catchRadius: 0.84,
   catchMinHeight: 1.35,
   catchMaxHeight: 2.7,
   action: "ready",
@@ -1359,17 +1353,12 @@ function updateFielders(dt) {
 
   fieldingActors.forEach((actor) => {
     const selected = fieldingPlay?.actor === actor;
-    const hasReacted = selected && performance.now() >= fieldingPlay.moveAt;
-    const target = selected && hasReacted
-      ? fieldingPlay.target
-      : { x: actor.homeX, z: actor.homeZ };
+    // The restored V1 response begins on the same frame that the shot is played.
+    // This retains smooth acceleration without making a close fielder look asleep.
+    const target = selected ? fieldingPlay.target : { x: actor.homeX, z: actor.homeZ };
     moveFieldingActor(actor, target, dt);
 
     if (!selected) return;
-    if (!hasReacted) {
-      actor.action = "ready";
-      return;
-    }
     const interactionRadius = fieldingPlay.kind === "catch" ? actor.catchRadius : actor.radius;
     const closeToBall = Math.hypot(ball.x - actor.x, ball.z - actor.z) <= interactionRadius + 0.28;
     actor.action = closeToBall
@@ -1393,19 +1382,6 @@ function moveFieldingActor(actor, target, dt) {
   }
   if (distance <= 0.04) actor.speed = 0;
   if (actor.action !== "catch" && actor.action !== "stop") actor.action = distance > 0.08 ? "shuffle" : "ready";
-}
-
-function isApproachingFielderFront(actor, vx, vz) {
-  // Fielders face Lohit. Reverse the ball velocity to ask whether it is arriving
-  // from that forward-facing side, rather than from behind or an implausible angle.
-  const fromBallX = -vx;
-  const fromBallZ = -vz;
-  const facingX = -actor.homeX;
-  const facingZ = battingStumpsZ - actor.homeZ;
-  const fromBallLength = Math.hypot(fromBallX, fromBallZ) || 1;
-  const facingLength = Math.hypot(facingX, facingZ) || 1;
-  const alignment = (fromBallX * facingX + fromBallZ * facingZ) / (fromBallLength * facingLength);
-  return alignment >= 0.4;
 }
 
 function predictFieldingPlay() {
@@ -1449,8 +1425,7 @@ function predictFieldingPlay() {
           && !simulation.bounced
           && !simulation.touchedRoof
           && simulation.y >= actor.catchMinHeight
-          && simulation.y <= actor.catchMaxHeight
-          && isApproachingFielderFront(actor, simulation.vx, simulation.vz);
+          && simulation.y <= actor.catchMaxHeight;
         // A ground ball must first visibly bounce. A low full toss cannot be magically
         // collected as a stop before the promised ground-drive bounce takes place.
         const canStop = simulation.bounced;
@@ -1458,11 +1433,8 @@ function predictFieldingPlay() {
         if (!kind) return null;
         const interactionRadius = kind === "catch" ? actor.catchRadius : actor.radius;
         const moveNeeded = Math.max(0, distanceFromHome - interactionRadius);
-        const moveLimit = kind === "catch" ? fielderCatchMoveLimit : fielderMoveLimit;
-        const reactionTime = kind === "catch" ? fielderCatchReactionSeconds : fielderStopReactionSeconds;
-        const setupTime = kind === "catch" ? fielderCatchSetupSeconds : 0;
-        const canReach = moveNeeded <= moveLimit
-          && estimateFielderMoveTime(moveNeeded) + reactionTime + setupTime <= elapsed;
+        const canReach = moveNeeded <= fielderMoveLimit
+          && estimateFielderMoveTime(moveNeeded) <= elapsed;
         return canReach ? {
           actor,
           kind,
@@ -1470,20 +1442,21 @@ function predictFieldingPlay() {
           x: simulation.x,
           z: simulation.z,
           y: simulation.y,
-          distanceFromHome,
-          reactionTime
+          distanceFromHome
         } : null;
       })
       .filter(Boolean)
       .sort((a, b) => a.distanceFromHome - b.distanceFromHome)[0];
 
     if (candidate) {
-      const target = getReachableFieldingTarget(candidate.actor, candidate.x, candidate.z, candidate.kind);
+      const target = getReachableFieldingTarget(candidate.actor, candidate.x, candidate.z);
       console.debug(`[Fielding V2] ${candidate.actor.label} selected for ${candidate.kind} at ${candidate.time.toFixed(2)}s.`);
       return {
         ...candidate,
         target,
-        moveAt: performance.now() + candidate.reactionTime * 1000
+        // The prediction is only a planned interception. If it has not materialised
+        // shortly after this instant, updateShot releases it and the ball carries on.
+        expiresAt: performance.now() + (candidate.time + 0.32) * 1000
       };
     }
   }
@@ -1497,12 +1470,11 @@ function estimateFielderMoveTime(distance) {
   return fielderMoveSpeed / fielderAcceleration + (distance - accelerationDistance) / fielderMoveSpeed;
 }
 
-function getReachableFieldingTarget(actor, ballX, ballZ, kind) {
+function getReachableFieldingTarget(actor, ballX, ballZ) {
   const dx = ballX - actor.homeX;
   const dz = ballZ - actor.homeZ;
   const distance = Math.hypot(dx, dz) || 1;
-  const movementLimit = kind === "catch" ? fielderCatchMoveLimit : fielderMoveLimit;
-  const travel = Math.min(movementLimit, distance);
+  const travel = Math.min(fielderMoveLimit, distance);
   return {
     x: actor.homeX + dx / distance * travel,
     z: actor.homeZ + dz / distance * travel
@@ -1765,6 +1737,7 @@ function updateShot(dt) {
   if (resolveFielderInteraction()) {
     return;
   }
+  releaseMissedFieldingPlay();
   if (ball.x - ball.radius <= -court.halfWidth || ball.x + ball.radius >= court.halfWidth) {
     const hitLeft = ball.x < 0;
     ball.x = hitLeft ? -court.halfWidth + ball.radius : court.halfWidth - ball.radius;
@@ -1785,6 +1758,16 @@ function updateShot(dt) {
   if (performance.now() >= resetTime || ball.z < court.nearZ + 0.2) finishCurrentBall(450);
 }
 
+function releaseMissedFieldingPlay() {
+  // A prediction is not allowed to own the ball indefinitely. If the selected player
+  // has missed the planned meeting moment, release the attempt and let physics continue.
+  if (!fieldingPlay || delivery.phase !== "shot" || !Number.isFinite(fieldingPlay.expiresAt)) return;
+  if (performance.now() < fieldingPlay.expiresAt) return;
+  fieldingPlay.actor.action = "ready";
+  fieldingPlay.actor.speed = 0;
+  fieldingPlay = null;
+}
+
 function resolveFielderInteraction() {
   // A scoring wall always wins if it was reached first, and only the player selected
   // from the predicted path is allowed to resolve this ball.
@@ -1799,8 +1782,7 @@ function resolveFielderInteraction() {
     && !shotHasTouchedRoof
     && !shotHasTouchedRearWall
     && ball.y >= fielder.catchMinHeight
-    && ball.y <= fielder.catchMaxHeight
-    && isApproachingFielderFront(fielder, ball.vx, ball.vz);
+    && ball.y <= fielder.catchMaxHeight;
 
   if (canCatch) {
     // Preserve the actual meeting point instead of snapping the ball to a distant sprite.
