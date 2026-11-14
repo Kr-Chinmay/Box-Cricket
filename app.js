@@ -225,10 +225,19 @@ const bowlerFielder = {
 const fieldingActors = [...fielders, bowlerFielder];
 // Ball is reduced again for the compact underarm court, both visually and physically.
 const ball = { x: 0, y: 1.25, z: battingStumpsZ, vx: 0, vy: 0, vz: 0, radius: 0.0672 };
-const delivery = { phase: "held", nextAt: 0, windupAt: 0, releasedAt: 0, bounced: false };
+const delivery = {
+  phase: "held",
+  nextAt: 0,
+  windupAt: 0,
+  releasedAt: 0,
+  bounced: false,
+  plan: null,
+  spin: null
+};
 const deliveryDelayMs = 2200;
 const deliveryWindupMs = 750;
 const matchConfig = { target: 40, totalBalls: 24, maxWickets: ordinaryLineup.length };
+let deliveryDeck = [];
 // Open with the shot guide 30° toward leg side (screen-left), clear of the bowler and front-wall labels.
 const defaultShotAngle = -30 * Math.PI / 180;
 let shotAngle = defaultShotAngle;
@@ -271,6 +280,156 @@ let lastFrame = performance.now();
 // The backlift begins with the player's finger movement; impact begins on release.
 // Keeping those two moments separate prevents the visual swing from trailing the ball.
 const driveAnimation = { phase: "idle", startedAt: 0 };
+
+function randomRange(minimum, maximum) {
+  return minimum + Math.random() * (maximum - minimum);
+}
+
+function randomMissSide(preferredSide = null) {
+  if (!preferredSide) return Math.random() < 0.5 ? "leg" : "off";
+  // Spin misses usually continue in their natural turning direction, but an occasional
+  // under-turn keeps the line believable rather than mechanically identical.
+  return Math.random() < 0.76 ? preferredSide : (preferredSide === "off" ? "leg" : "off");
+}
+
+function missTargetFor(side) {
+  return side === "off" ? randomRange(0.64, 0.92) : randomRange(-0.92, -0.64);
+}
+
+function createPlannedDelivery(type, outcome) {
+  const isStumpTarget = outcome === "stumps";
+  if (type === "straight") {
+    const missSide = isStumpTarget ? null : randomMissSide();
+    const finalTargetX = isStumpTarget ? randomRange(-0.24, 0.24) : missTargetFor(missSide);
+    return { type, outcome, missSide, bounceX: finalTargetX, finalTargetX };
+  }
+
+  if (type === "leg-spin") {
+    const missSide = isStumpTarget ? null : randomMissSide("off");
+    return {
+      type,
+      outcome,
+      missSide,
+      // Screen-left before the bounce, then a gradual turn toward screen-right.
+      bounceX: randomRange(-0.62, -0.36),
+      finalTargetX: isStumpTarget ? randomRange(0.03, 0.27) : missTargetFor(missSide)
+    };
+  }
+
+  const missSide = isStumpTarget ? null : randomMissSide("leg");
+  return {
+    type: "off-spin",
+    outcome,
+    missSide,
+    // Screen-right before the bounce, then a gradual turn toward screen-left.
+    bounceX: randomRange(0.36, 0.62),
+    finalTargetX: isStumpTarget ? randomRange(-0.27, -0.03) : missTargetFor(missSide)
+  };
+}
+
+function shuffle(values) {
+  const result = [...values];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
+}
+
+function hasThreeInARow(deck, property) {
+  for (let index = 2; index < deck.length; index += 1) {
+    if (deck[index][property] === deck[index - 1][property]
+      && deck[index][property] === deck[index - 2][property]) return true;
+  }
+  return false;
+}
+
+function createConstrainedOutcomeOrder() {
+  const remaining = { stumps: 8, miss: 16 };
+  const result = [];
+  let searchSteps = 0;
+
+  function canPlace(outcome) {
+    const firstPrevious = result[result.length - 1];
+    const secondPrevious = result[result.length - 2];
+    return !(firstPrevious && secondPrevious
+      && outcome === firstPrevious && outcome === secondPrevious);
+  }
+
+  function placeNext() {
+    if (result.length === matchConfig.totalBalls) return true;
+    if (searchSteps >= 40000) return false;
+    const candidates = shuffle(["stumps", "miss"])
+      .filter((outcome) => remaining[outcome] > 0 && canPlace(outcome));
+    for (const outcome of candidates) {
+      searchSteps += 1;
+      remaining[outcome] -= 1;
+      result.push(outcome);
+      if (placeNext()) return true;
+      result.pop();
+      remaining[outcome] += 1;
+    }
+    return false;
+  }
+
+  return placeNext() ? result : ["miss", "miss", "stumps", "miss", "miss", "stumps", "miss", "miss", "stumps", "miss", "miss", "stumps", "miss", "miss", "stumps", "miss", "miss", "stumps", "miss", "miss", "stumps", "miss", "miss", "stumps"];
+}
+
+function assignTypesToOutcomeOrder(outcomes, targetCounts) {
+  const types = ["straight", "leg-spin", "off-spin"];
+  const remaining = Object.fromEntries(types.map((type) => [type, {
+    stumps: targetCounts[type],
+    miss: 8 - targetCounts[type]
+  }]));
+  const result = [];
+  let searchSteps = 0;
+
+  function canPlace(type) {
+    const firstPrevious = result[result.length - 1];
+    const secondPrevious = result[result.length - 2];
+    return !(firstPrevious && secondPrevious && type === firstPrevious && type === secondPrevious);
+  }
+
+  function placeNext(index) {
+    if (index === outcomes.length) return true;
+    if (searchSteps >= 80000) return false;
+    const outcome = outcomes[index];
+    const candidates = shuffle(types)
+      .filter((type) => remaining[type][outcome] > 0 && canPlace(type));
+    for (const type of candidates) {
+      searchSteps += 1;
+      remaining[type][outcome] -= 1;
+      result.push(type);
+      if (placeNext(index + 1)) return true;
+      result.pop();
+      remaining[type][outcome] += 1;
+    }
+    return false;
+  }
+
+  return placeNext(0) ? result : null;
+}
+
+function createDeliveryDeck() {
+  const types = ["straight", "leg-spin", "off-spin"];
+  // One style receives two targeting balls this match; the other two receive three.
+  // Across matches, the reduced style is chosen randomly so no bowling type is favoured.
+  const twoTargetType = types[Math.floor(Math.random() * types.length)];
+  const targetCounts = Object.fromEntries(types.map((type) => [type, type === twoTargetType ? 2 : 3]));
+  const outcomes = createConstrainedOutcomeOrder();
+  const assignedTypes = assignTypesToOutcomeOrder(outcomes, targetCounts);
+  // The fallback remains balanced even if a future rule makes the optional type-run
+  // constraint impossible. With the current 8/8/8 mix, the normal assignment succeeds.
+  const fallbackTypes = types.flatMap((type) => Array(8).fill(type));
+  return outcomes.map((outcome, index) => createPlannedDelivery(assignedTypes?.[index] || fallbackTypes[index], outcome));
+}
+
+function deliveryCueLabel(plan = delivery.plan) {
+  if (!plan) return "";
+  if (plan.type === "leg-spin") return "LEG-SPIN";
+  if (plan.type === "off-spin") return "OFF-SPIN";
+  return "STRAIGHT";
+}
 
 function isMatchActive() {
   return matchState === "playing";
@@ -632,6 +791,9 @@ function startNewMatch() {
   score = 0;
   wickets = 0;
   ballsBowled = 0;
+  deliveryDeck = createDeliveryDeck();
+  delivery.plan = null;
+  delivery.spin = null;
   activeLineup = ordinaryLineup;
   activeBatterIndex = 0;
   batterChange = null;
@@ -775,6 +937,7 @@ function drawCourt() {
   drawLine(project(2.2, 0.03, bowlingPoppingCreaseZ), project(2.2, 0.03, bowlingStumpsZ + 0.65), "#f6f6e8", 1.8);
 
   // The stationary underarm bowler is placed at the far bowling crease. There is deliberately no run-up.
+  drawDeliveryCue();
   drawBowler();
   drawWicket(bowlingStumpsZ, 1.45);
   drawFielders();
@@ -830,6 +993,34 @@ function drawShotGuide() {
   ctx.lineCap = "round";
   ctx.setLineDash([1, 8]);
   ctx.beginPath(); ctx.moveTo(layout.batContact.x, layout.batContact.y); ctx.lineTo(endX, endY); ctx.stroke();
+  ctx.restore();
+}
+
+function drawDeliveryCue() {
+  if (delivery.phase !== "windup" || !delivery.plan) return;
+  const progress = Math.min(1, Math.max(0, (visualGameTime() - delivery.windupAt) / deliveryWindupMs));
+  // It arrives during the set-up, then disappears as the bowler's hand releases the ball.
+  const alpha = Math.min(1, progress / 0.16) * Math.min(1, (1 - progress) / 0.24);
+  if (alpha <= 0) return;
+
+  // Keep the call high in the far-end roof space, clear of the bowler, ball path,
+  // front-wall scoring numbers, and the batting controls.
+  const anchor = project(0, court.ceiling - 1.4, bowlingStumpsZ + 0.45);
+  const label = deliveryCueLabel();
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = "800 12px Inter, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const width = ctx.measureText(label).width + 24;
+  const height = 25;
+  ctx.fillStyle = "rgba(7, 24, 38, 0.9)";
+  ctx.fillRect(anchor.x - width / 2, anchor.y - height / 2, width, height);
+  ctx.strokeStyle = "rgba(243, 211, 124, 0.86)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(anchor.x - width / 2, anchor.y - height / 2, width, height);
+  ctx.fillStyle = "#f5d782";
+  ctx.fillText(label, anchor.x, anchor.y + 0.5);
   ctx.restore();
 }
 
@@ -1323,21 +1514,84 @@ function placeBallInBowlerHand(progress = 0) {
   ball.vx = ball.vy = ball.vz = 0;
 }
 
+function estimateBounceTime() {
+  let simulatedY = ball.y;
+  let simulatedVy = ball.vy;
+  const step = 0.005;
+  for (let elapsed = step; elapsed <= 2; elapsed += step) {
+    simulatedVy -= 9.8 * step;
+    simulatedY += simulatedVy * step;
+    if (simulatedY - ball.radius <= 0) return elapsed;
+  }
+  return 0.65;
+}
+
+function configurePlannedDeliveryPath() {
+  const plan = delivery.plan;
+  if (!plan) return;
+  const bounceTime = estimateBounceTime();
+  const bounceZ = ball.z + ball.vz * bounceTime;
+  const postBounceVz = ball.vz * 0.96;
+  const timeAfterBounce = Math.max(
+    0.1,
+    (bounceZ - (battingStumpsZ + ball.radius)) / Math.abs(postBounceVz)
+  );
+
+  if (plan.type === "straight") {
+    // A straight ball follows one line through the bounce. The 0.96 term mirrors
+    // the existing skid slowdown so the planned target still reaches the wicket.
+    ball.vx = (plan.finalTargetX - ball.x) / (bounceTime + timeAfterBounce * 0.96);
+    delivery.spin = null;
+    return;
+  }
+
+  // Spin balls first head for their planned bounce point. The lateral turn is only
+  // activated after that bounce, so the ball never snaps sideways in mid-air.
+  ball.vx = (plan.bounceX - ball.x) / bounceTime;
+  delivery.spin = {
+    active: false,
+    targetX: plan.finalTargetX,
+    acceleration: 0
+  };
+}
+
+function activatePostBounceSpin() {
+  if (!delivery.spin || delivery.spin.active) return;
+  const timeToStumps = Math.max(
+    0.1,
+    (ball.z - (battingStumpsZ + ball.radius)) / Math.abs(ball.vz)
+  );
+  // Constant lateral acceleration gives a gradual, readable turn after the bounce.
+  // The target is planned before release, so this is physics execution—not a late outcome change.
+  delivery.spin.acceleration = 2 * (
+    delivery.spin.targetX - ball.x - ball.vx * timeToStumps
+  ) / (timeToStumps * timeToStumps);
+  delivery.spin.active = true;
+}
+
+function missBallStatus() {
+  const side = delivery.plan?.missSide || (ball.x >= 0 ? "off" : "leg");
+  return side === "off"
+    ? "Ball passed outside off stump — dot ball."
+    : "Ball passed down leg side — dot ball.";
+}
+
 function beginDelivery(now) {
   if (!isMatchActive()) return;
+  delivery.plan = deliveryDeck[ballsBowled] || createPlannedDelivery("straight", "miss");
   delivery.phase = "windup";
   delivery.windupAt = now;
   timingRunning = false;
-  statusElement.textContent = "Bowler is releasing an underarm delivery…";
+  statusElement.textContent = `${deliveryCueLabel()} delivery coming…`;
 }
 
 function releaseDelivery(now) {
   placeBallInBowlerHand(1);
   // A deliberately gentle first-version underarm ball: one clear bounce and enough time
   // for a phone player to see it, judge it, and complete a swipe.
-  ball.vx = -0.84;
   ball.vy = 0.9;
   ball.vz = -5.76;
+  configurePlannedDeliveryPath();
   delivery.bounced = false;
   delivery.phase = "incoming";
   delivery.releasedAt = now;
@@ -1388,6 +1642,7 @@ function updateDelivery(dt) {
   // Before its one bounce the ball drops naturally. After that bounce it skids low
   // toward Lohit, preventing the unrealistic second and third bounces.
   if (!delivery.bounced) ball.vy -= 9.8 * dt;
+  if (delivery.bounced && delivery.spin?.active) ball.vx += delivery.spin.acceleration * dt;
   ball.x += ball.vx * dt;
   if (!delivery.bounced) ball.y += ball.vy * dt;
   ball.z += ball.vz * dt;
@@ -1398,11 +1653,15 @@ function updateDelivery(dt) {
     ball.vx *= 0.96;
     ball.vz *= 0.96;
     delivery.bounced = true;
+    activatePostBounceSpin();
   }
 
-  // A late straight ball now resolves naturally at the batting wicket. A ball outside the
-  // three-stump width is allowed to continue past Lohit instead of pausing for a swipe.
-  if (ball.z <= battingStumpsZ + ball.radius && ball.y <= 2.05 && Math.abs(ball.x) <= 0.43) {
+  // Only a line planned to target the wicket may produce a bowled dismissal. A planned
+  // miss stays a legal dot ball even when Lohit does not attempt a shot.
+  if (delivery.plan?.outcome === "stumps"
+    && ball.z <= battingStumpsZ + ball.radius
+    && ball.y <= 2.05
+    && Math.abs(ball.x) <= 0.43) {
     ball.z = battingStumpsZ + ball.radius;
     ball.y = Math.max(ball.radius * 1.2, ball.y);
     ball.vx = ball.vy = ball.vz = 0;
@@ -1419,7 +1678,7 @@ function updateDelivery(dt) {
   }
 
   if (ball.z < battingStumpsZ - 1.35) {
-    queueBallResult({ label: "Dot ball", status: "Ball passed Lohit outside the stumps — dot ball." });
+    queueBallResult({ label: "Dot ball", status: missBallStatus() });
     finishCurrentBall(500);
   }
 }
@@ -1703,6 +1962,8 @@ function resetBall(message) {
   delivery.phase = "held";
   delivery.nextAt = performance.now() + deliveryDelayMs;
   delivery.bounced = false;
+  delivery.plan = deliveryDeck[ballsBowled] || null;
+  delivery.spin = null;
   placeBallInBowlerHand();
   inPlay = false;
   scoredThisBall = false;
