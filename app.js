@@ -34,14 +34,25 @@ const howToPlayScreenElement = document.getElementById("how-to-play-screen");
 const closeHowToPlayButton = document.getElementById("close-how-to-play");
 const soundToggleButton = document.getElementById("sound-toggle");
 
-// All V1 audio is synthesized locally with the Web Audio API. This keeps the download
-// tiny and avoids copied broadcast, game, or commentary material. Voice commentary is
-// deliberately absent until we have original recorded clips to use.
+// Effects and ambience are synthesized locally. The four short callouts below are
+// original, locally generated assets—not copied broadcasts, game samples, or an
+// imitation of any real commentator. They are deliberately limited to key events.
 function createAudioManager() {
   let context = null;
   let masterGain = null;
   let ambienceSource = null;
   let ambienceGain = null;
+  let activeVoiceSource = null;
+  let voicePreloadStarted = false;
+  let voiceCallLockedForBall = false;
+  let voicePlaybackEndsAt = 0;
+  const voiceBuffers = new Map();
+  const voiceCalls = {
+    four: { source: "assets/four.wav", fallbackSeconds: 0.62 },
+    six: { source: "assets/six.wav", fallbackSeconds: 0.68 },
+    caught: { source: "assets/caught.wav", fallbackSeconds: 0.8 },
+    bowled: { source: "assets/bowled.wav", fallbackSeconds: 0.9 }
+  };
   let soundEnabled = true;
   let activeEffects = 0;
   const maximumEffects = 3;
@@ -168,6 +179,59 @@ function createAudioManager() {
     }
   }
 
+  function stopVoiceCall() {
+    if (activeVoiceSource) {
+      try {
+        activeVoiceSource.stop();
+      } catch (_) {
+        // A completed buffer source cannot be stopped a second time.
+      }
+    }
+    activeVoiceSource = null;
+    voicePlaybackEndsAt = 0;
+  }
+
+  function preloadVoiceCalls() {
+    if (voicePreloadStarted || !canPlay() || typeof fetch !== "function") return;
+    voicePreloadStarted = true;
+    Object.entries(voiceCalls).forEach(([name, call]) => {
+      fetch(call.source)
+        .then((response) => {
+          if (!response.ok) throw new Error(`Voice callout unavailable: ${name}`);
+          return response.arrayBuffer();
+        })
+        .then((audioData) => context.decodeAudioData(audioData))
+        .then((buffer) => voiceBuffers.set(name, buffer))
+        .catch(() => {
+          // Voice clips are optional enhancement only. Text feedback always remains.
+        });
+    });
+  }
+
+  function playVoiceCall(name) {
+    if (!canPlay() || voiceCallLockedForBall) return false;
+    const buffer = voiceBuffers.get(name);
+    if (!buffer) return false;
+    const call = voiceCalls[name];
+    if (!call) return false;
+
+    stopVoiceCall();
+    const source = context.createBufferSource();
+    const volume = context.createGain();
+    source.buffer = buffer;
+    volume.gain.value = 0.68;
+    source.connect(volume).connect(masterGain);
+    source.onended = () => {
+      if (activeVoiceSource === source) activeVoiceSource = null;
+    };
+    activeVoiceSource = source;
+    voiceCallLockedForBall = true;
+    voicePlaybackEndsAt = performance.now() + Math.max(call.fallbackSeconds, buffer.duration) * 1000;
+    duckAmbience(Math.max(call.fallbackSeconds, buffer.duration) + 0.2);
+    source.start();
+    return true;
+  }
+
   function crowdReaction(intensity = 0.04) {
     duckAmbience(0.7);
     noise({ seconds: 0.48, gain: intensity, frequency: 540, q: 0.35, fade: 0.46 });
@@ -189,17 +253,27 @@ function createAudioManager() {
   return {
     prepareFromGesture: ensureContextFromGesture,
     startForGameplay() {
-      if (ensureContextFromGesture()) startAmbience();
+      if (ensureContextFromGesture()) {
+        preloadVoiceCalls();
+        startAmbience();
+      }
     },
-    pauseForOverlay: stopAmbience,
+    pauseForOverlay() {
+      stopAmbience();
+      stopVoiceCall();
+    },
     toggle() {
       soundEnabled = !soundEnabled;
       if (!soundEnabled) {
         if (masterGain && context) masterGain.gain.setValueAtTime(0, context.currentTime);
         stopAmbience();
+        stopVoiceCall();
       } else if (ensureContextFromGesture()) {
         masterGain.gain.setValueAtTime(0.72, context.currentTime);
-        if (isMatchActive()) startAmbience();
+        if (isMatchActive()) {
+          preloadVoiceCalls();
+          startAmbience();
+        }
       }
       updateToggle();
     },
@@ -224,14 +298,21 @@ function createAudioManager() {
       tone({ frequency: 280, endFrequency: 120, seconds: 0.18, gain: 0.075, type: "triangle" });
       crowdReaction(0.06);
     },
+    playCallout: playVoiceCall,
+    resetBallCallLock() { voiceCallLockedForBall = false; },
     playResult(isWin) {
-      duckAmbience(0.8);
-      if (isWin) {
-        tone({ frequency: 392, endFrequency: 784, seconds: 0.28, gain: 0.09, type: "triangle" });
-        crowdReaction(0.085);
-      } else {
-        tone({ frequency: 235, endFrequency: 125, seconds: 0.3, gain: 0.07, type: "sine" });
-      }
+      const playStinger = () => {
+        duckAmbience(0.8);
+        if (isWin) {
+          tone({ frequency: 392, endFrequency: 784, seconds: 0.28, gain: 0.09, type: "triangle" });
+          crowdReaction(0.085);
+        } else {
+          tone({ frequency: 235, endFrequency: 125, seconds: 0.3, gain: 0.07, type: "sine" });
+        }
+      };
+      const waitForCallout = Math.max(0, voicePlaybackEndsAt - performance.now() + 45);
+      if (waitForCallout > 0) window.setTimeout(playStinger, waitForCallout);
+      else playStinger();
     },
     isEnabled() { return soundEnabled; }
   };
@@ -1912,6 +1993,7 @@ function updateDelivery(dt) {
     delivery.resultAt = now;
     timingRunning = false;
     audioManager.playWicket();
+    audioManager.playCallout("bowled");
     queueBallResult({
       wicket: true,
       dismissal: "bowled",
@@ -2010,6 +2092,7 @@ function resolveFielderInteraction() {
     delivery.phase = "fielderCaught";
     delivery.resultAt = performance.now();
     audioManager.playCatch();
+    audioManager.playCallout("caught");
     queueBallResult({
       wicket: true,
       dismissal: "caught",
@@ -2048,6 +2131,8 @@ function updateFielderResolution() {
 
 function scoreRuns(runs) {
   audioManager.playWall(runs);
+  if (runs === 4) audioManager.playCallout("four");
+  if (runs === 6) audioManager.playCallout("six");
   queueBallResult({
     runs,
     label: `${runs} run${runs === 1 ? "" : "s"}`,
@@ -2323,6 +2408,7 @@ function resetBall(message) {
   driveAnimation.phase = "idle";
   timingRunning = false;
   timingProfile = null;
+  audioManager.resetBallCallLock();
   timingPosition = 0.5;
   timingMarker.style.left = "50%";
   loftButton.disabled = false;
