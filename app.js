@@ -200,7 +200,7 @@ const fielderDeceleration = 24;
 // These same world coordinates drive both the drawn fielders and their deterministic
 // interception zones, so the ball can only be caught or stopped where a player is visible.
 const fielders = [
-  { id: "left-front", label: "Left front-wall fielder", x: -11.2, z: 17.8, homeX: -11.2, homeZ: 17.8, height: 118, mirror: false, pose: "deep", radius: 1.32, catchRadius: 1.12, catchMinHeight: 1.7, catchMaxHeight: 4.85, action: "ready", speed: 0 },
+  { id: "left-front", label: "Left front-wall fielder", x: -5.4, z: 17.8, homeX: -5.4, homeZ: 17.8, height: 118, mirror: false, pose: "deep", radius: 1.32, catchRadius: 1.12, catchMinHeight: 1.7, catchMaxHeight: 4.85, action: "ready", speed: 0 },
   { id: "right-front", label: "Right front-wall fielder", x: 11.2, z: 17.8, homeX: 11.2, homeZ: 17.8, height: 118, mirror: true, pose: "deep", radius: 1.32, catchRadius: 1.12, catchMinHeight: 1.7, catchMaxHeight: 4.85, action: "ready", speed: 0 },
   { id: "leg-side", label: "Leg-side wall fielder", x: -9.8, z: 3.2, homeX: -9.8, homeZ: 3.2, height: 78, mirror: false, pose: "side", radius: 1.18, catchRadius: 0.92, catchMinHeight: 1.4, catchMaxHeight: 2.85, action: "ready", speed: 0 },
   { id: "off-side", label: "Off-side wall fielder", x: 9.8, z: 3.2, homeX: 9.8, homeZ: 3.2, height: 78, mirror: true, pose: "side", radius: 1.18, catchRadius: 0.92, catchMinHeight: 1.4, catchMaxHeight: 2.85, action: "ready", speed: 0 }
